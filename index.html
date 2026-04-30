@@ -63,7 +63,7 @@ button.small { padding: 0.3rem 0.65rem; font-size: 12px; }
 .toolbar .count { font-size: 12px; color: #888; margin-right: auto; }
 .flash { animation: flashbg 0.6s ease; }
 @keyframes flashbg { 0% { background: #d6edca; } 100% { background: #f4f1ec; } }
-#camera-select { font-size: 12px; padding: 0.3rem 0.5rem; border: 1px solid #d0c9c0; border-radius: 5px; background: #fff; color: #1a1a18; max-width: 220px; }
+#camera-select { font-size: 12px; padding: 0.3rem 0.5rem; border: 1px solid #d0c9c0; border-radius: 5px; background: #fff; color: #1a1a18; max-width: 220px; margin-bottom: 10px; }
 .registry-page { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
 .registry-grid { display: grid; grid-template-columns: 360px 1fr; gap: 1.5rem; }
 @media (max-width: 700px) { .registry-grid { grid-template-columns: 1fr; } }
@@ -247,17 +247,27 @@ button.small { padding: 0.3rem 0.65rem; font-size: 12px; }
 </div>
 
 <script>
+// State Management
 const log = [];
 const assets = {};
-let codeReader = null;
 let lastScannedTag = null;
+let scanIntervalId = null;
+let guideAnimFrame = null;
+let flashAlphaCur = 0;
 
+// Canvas setup
+let cropCanvas = document.createElement('canvas');
+let cropCtx = cropCanvas.getContext('2d', { willReadFrequently: true });
+let zxReader = new ZXing.BrowserMultiFormatReader();
+
+// Utility Functions
 function pad(n){ return String(n).padStart(2,'0'); }
 function nowTime(){ const d=new Date(); return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds()); }
 function todayDate(){ const d=new Date(); return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
 function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function fmt$(v){ return (v&&parseFloat(v))?'$'+parseFloat(v).toFixed(2):'—'; }
 
+// Init
 document.getElementById('f-date').value = todayDate();
 setInterval(()=>{ document.getElementById('clock').textContent = nowTime(); }, 1000);
 
@@ -268,24 +278,31 @@ function showTab(el){
   document.getElementById('page-'+el.dataset.page).classList.add('active');
 }
 
+// Camera & Scanning Logic
 async function initCamera(){
   if(typeof ZXing==='undefined'){ setTimeout(initCamera,300); return; }
-  codeReader = new ZXing.BrowserMultiFormatReader();
   try {
-    const devices = await codeReader.listVideoInputDevices();
+    const devices = await zxReader.listVideoInputDevices();
     const sel = document.getElementById('camera-select');
     sel.innerHTML = '';
+    
     if(!devices.length){ sel.innerHTML='<option>No cameras found</option>'; return; }
+    
     devices.forEach((d,i)=>{
       const o=document.createElement('option');
       o.value=d.deviceId; o.text=d.label||'Camera '+(i+1); sel.appendChild(o);
     });
-    const id=devices[devices.length>1?1:0].deviceId;
-    sel.value=id; startScan(id);
+    
+    // Default to back camera if possible
+    const backCam = devices.find(d => d.label.toLowerCase().includes('back'));
+    const initialId = backCam ? backCam.deviceId : devices[0].deviceId;
+    sel.value = initialId;
+    
+    startScan(initialId);
+    
     sel.onchange=()=>{
       const video=document.getElementById('preview');
       if(video.srcObject) video.srcObject.getTracks().forEach(t=>t.stop());
-      if(scanIntervalId){ clearInterval(scanIntervalId); scanIntervalId=null; }
       startScan(sel.value);
     };
   } catch(e){
@@ -293,148 +310,154 @@ async function initCamera(){
   }
 }
 
-let guideAnimFrame = null;
-let cropCanvas = null;
-let cropCtx = null;
-let scanIntervalId = null;
+function getZone(W, H){
+  const zW = Math.round(W * 0.78);
+  const zH = Math.round(H * 0.36);
+  return { zx: Math.round((W-zW)/2), zy: Math.round((H-zH)/2), zW, zH };
+}
+
+function drawCorner(ctx, cx, cy, dx, dy, t, r){
+  ctx.beginPath();
+  ctx.moveTo(cx + dx*(r+t), cy);
+  ctx.lineTo(cx + dx*r, cy);
+  ctx.arcTo(cx, cy, cx, cy + dy*r, r);
+  ctx.lineTo(cx, cy + dy*(r+t));
+  ctx.stroke();
+}
 
 function drawGuide(){
   const gc = document.getElementById('guide-canvas');
   const video = document.getElementById('preview');
   if(!gc || !video) return;
-  const W = video.offsetWidth, H = video.offsetHeight;
-  if(!W || !H) { guideAnimFrame = requestAnimationFrame(drawGuide); return; }
-  gc.width = W; gc.height = H;
+  const rect = video.getBoundingClientRect();
+  const W = Math.round(rect.width);
+  const H = Math.round(rect.height);
+  if(!W || !H){ guideAnimFrame = requestAnimationFrame(drawGuide); return; }
+
+  const dpr = window.devicePixelRatio || 1;
+  gc.width = W * dpr;
+  gc.height = H * dpr;
+  gc.style.width = W + 'px';
+  gc.style.height = H + 'px';
+
   const ctx = gc.getContext('2d');
-  ctx.clearRect(0,0,W,H);
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
 
-  const zoneW = Math.round(W * 0.72);
-  const zoneH = Math.round(H * 0.38);
-  const zx = Math.round((W - zoneW) / 2);
-  const zy = Math.round((H - zoneH) / 2);
+  const { zx, zy, zW, zH } = getZone(W, H);
 
-  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  // Dim background
+  ctx.fillStyle = 'rgba(0,0,0,0.52)';
   ctx.fillRect(0, 0, W, zy);
-  ctx.fillRect(0, zy + zoneH, W, H - zy - zoneH);
-  ctx.fillRect(0, zy, zx, zoneH);
-  ctx.fillRect(zx + zoneW, zy, W - zx - zoneW, zoneH);
+  ctx.fillRect(0, zy + zH, W, H - zy - zH);
+  ctx.fillRect(0, zy, zx, zH);
+  ctx.fillRect(zx + zW, zy, W - zx - zW, zH);
 
-  const r = 10, t = 22, lw = 3;
-  ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-  ctx.lineWidth = lw;
+  if(flashAlphaCur > 0){
+    ctx.strokeStyle = `rgba(80,210,80,${flashAlphaCur})`;
+    ctx.lineWidth = 2.5;
+    ctx.strokeRect(zx+1, zy+1, zW-2, zH-2);
+  }
+
+  // Corners
+  const t = 20, r = 8;
+  ctx.strokeStyle = 'rgba(255,255,255,0.92)';
+  ctx.lineWidth = 2.5;
   ctx.lineCap = 'round';
-  const corners = [[zx,zy],[zx+zoneW,zy],[zx,zy+zoneH],[zx+zoneW,zy+zoneH]];
-  const dirs = [[1,0,0,1],[-1,0,0,1],[1,0,0,-1],[-1,0,0,-1]];
-  corners.forEach(([cx,cy],[dx,dy,ex,ey])=>{
-    ctx.beginPath(); ctx.moveTo(cx+dx*r,cy); ctx.lineTo(cx+dx*(r+t),cy); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(cx,cy+ey*r); ctx.lineTo(cx,cy+ey*(r+t)); ctx.stroke();
-  },null);
-  corners.forEach(([cx,cy],[dx,dy,ex,ey])=>{
-    ctx.beginPath();
-    ctx.moveTo(cx+dx*r,cy);
-    ctx.arcTo(cx,cy,cx,cy+ey*r,r);
-    ctx.stroke();
-  },null);
+  ctx.lineJoin = 'round';
+  drawCorner(ctx, zx,    zy,     1,  1, t, r);
+  drawCorner(ctx, zx+zW, zy,    -1,  1, t, r);
+  drawCorner(ctx, zx,    zy+zH,  1, -1, t, r);
+  drawCorner(ctx, zx+zW, zy+zH, -1, -1, t, r);
 
-  const scanLineY = zy + ((Date.now() % 1800) / 1800) * zoneH;
-  const grad = ctx.createLinearGradient(zx, scanLineY-6, zx, scanLineY+6);
-  grad.addColorStop(0,'rgba(255,255,255,0)');
-  grad.addColorStop(0.5,'rgba(255,255,255,0.55)');
-  grad.addColorStop(1,'rgba(255,255,255,0)');
+  // Scanning laser line
+  const sweepFrac = (Date.now() % 1600) / 1600;
+  const scanY = zy + sweepFrac * zH;
+  const grad = ctx.createLinearGradient(zx, scanY-8, zx, scanY+8);
+  grad.addColorStop(0, 'rgba(255,255,255,0)');
+  grad.addColorStop(0.5, 'rgba(255,255,255,0.45)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = grad;
-  ctx.fillRect(zx, scanLineY-6, zoneW, 12);
+  ctx.fillRect(zx, scanY-8, zW, 16);
 
   guideAnimFrame = requestAnimationFrame(drawGuide);
 }
 
-function getGuideZone(){
-  const video = document.getElementById('preview');
-  const W = video.offsetWidth, H = video.offsetHeight;
-  const vW = video.videoWidth, vH = video.videoHeight;
-  if(!vW || !vH || !W || !H) return null;
-  const scaleX = vW / W, scaleY = vH / H;
-  const zoneW = Math.round(W * 0.72);
-  const zoneH = Math.round(H * 0.38);
-  const zx = Math.round((W - zoneW) / 2);
-  const zy = Math.round((H - zoneH) / 2);
-  return { sx: Math.round(zx*scaleX), sy: Math.round(zy*scaleY), sw: Math.round(zoneW*scaleX), sh: Math.round(zoneH*scaleY) };
-}
-
 function startScan(deviceId){
-  if(guideAnimFrame){ cancelAnimationFrame(guideAnimFrame); guideAnimFrame=null; }
-  if(scanIntervalId){ clearInterval(scanIntervalId); scanIntervalId=null; }
-  if(!cropCanvas){ cropCanvas=document.createElement('canvas'); cropCtx=cropCanvas.getContext('2d'); }
+  if(guideAnimFrame){ cancelAnimationFrame(guideAnimFrame); }
+  if(scanIntervalId){ clearInterval(scanIntervalId); }
 
   const video = document.getElementById('preview');
-
-  navigator.mediaDevices.getUserMedia({video:{deviceId:{exact:deviceId},facingMode:'environment',width:{ideal:1280},height:{ideal:960}}})
-  .then(stream=>{
-    video.srcObject=stream;
-    video.onloadedmetadata=()=>{
-      video.play();
-      drawGuide();
-      const hints = new Map();
-      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-      const reader = new ZXing.BrowserMultiFormatReader(hints);
-
-      scanIntervalId = setInterval(async ()=>{
-        if(video.readyState < 2) return;
-        const zone = getGuideZone();
-        if(!zone) return;
-        cropCanvas.width = zone.sw; cropCanvas.height = zone.sh;
-        cropCtx.drawImage(video, zone.sx, zone.sy, zone.sw, zone.sh, 0, 0, zone.sw, zone.sh);
-        try {
-          const imgData = cropCtx.getImageData(0,0,zone.sw,zone.sh);
-          const lum = new ZXing.RGBLuminanceSource(imgData.data, zone.sw, zone.sh);
-          const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-          const result = reader.decodeBitmap(bmp);
-          if(result){
-            const val = result.getText();
-            if(val===lastScannedTag) return;
-            lastScannedTag=val;
-            setTimeout(()=>{ lastScannedTag=null; }, 2500);
-            document.getElementById('f-tag').value = val;
-            populateFromRegistry(val, true);
-            flashGuide();
-          }
-        } catch(e){}
-      }, 200);
-    };
-  })
-  .catch(()=>{
-    codeReader.decodeFromVideoDevice(deviceId, video, (result)=>{
-      if(!result) return;
-      const val = result.getText();
-      if(val===lastScannedTag) return;
-      lastScannedTag=val;
-      setTimeout(()=>{ lastScannedTag=null; }, 2500);
-      document.getElementById('f-tag').value = val;
-      populateFromRegistry(val, true);
-    });
-  });
-}
-
-function flashGuide(){
-  const gc = document.getElementById('guide-canvas');
-  if(!gc) return;
-  const W=gc.width, H=gc.height;
-  const zoneW=Math.round(W*0.72), zoneH=Math.round(H*0.38);
-  const zx=Math.round((W-zoneW)/2), zy=Math.round((H-zoneH)/2);
-  const ctx=gc.getContext('2d');
-  let alpha=0.6;
-  const fade=()=>{
-    ctx.save();
-    ctx.globalCompositeOperation='source-over';
-    ctx.strokeStyle=`rgba(100,200,80,${alpha})`;
-    ctx.lineWidth=3;
-    ctx.strokeRect(zx+2,zy+2,zoneW-4,zoneH-4);
-    ctx.restore();
-    alpha-=0.06;
-    if(alpha>0) requestAnimationFrame(fade);
+  const constraints = { 
+    video: { 
+      deviceId: deviceId ? {exact: deviceId} : undefined, 
+      width: {ideal: 1280}, 
+      height: {ideal: 720} 
+    } 
   };
-  fade();
+
+  navigator.mediaDevices.getUserMedia(constraints).then(stream=>{
+    video.srcObject = stream;
+    video.onloadeddata = ()=>{
+      video.play().catch(()=>{});
+      drawGuide();
+
+      scanIntervalId = setInterval(()=>{
+        if(video.readyState < 2 || video.paused) return;
+        
+        const rect = video.getBoundingClientRect();
+        const vW = video.videoWidth, vH = video.videoHeight;
+        if(!vW || !vH) return;
+        
+        const { zx, zy, zW, zH } = getZone(rect.width, rect.height);
+        const sx = vW / rect.width, sy = vH / rect.height;
+        
+        const sw = Math.round(zW * sx);
+        const sh = Math.round(zH * sy);
+        
+        cropCanvas.width = sw;
+        cropCanvas.height = sh;
+        
+        try {
+          cropCtx.drawImage(video, Math.round(zx*sx), Math.round(zy*sy), sw, sh, 0, 0, sw, sh);
+          const imgData = cropCtx.getImageData(0, 0, sw, sh);
+          const lum = new ZXing.RGBLuminanceSource(imgData.data, sw, sh);
+          const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
+          const result = zxReader.decodeBitmap(bmp);
+          handleScanResult(result);
+        } catch(e){
+          // Fallback to full frame decode if crop fails
+          zxReader.decode(video).then(result => handleScanResult(result)).catch(()=>{});
+        }
+      }, 300);
+    };
+  }).catch(err => console.error("Camera Error: ", err));
 }
 
+function handleScanResult(result) {
+  if (result) {
+    const val = result.getText();
+    if (val === lastScannedTag) return;
+    
+    lastScannedTag = val;
+    if (navigator.vibrate) navigator.vibrate(100);
+    setTimeout(() => { lastScannedTag = null; }, 2500);
+    
+    document.getElementById('f-tag').value = val;
+    populateFromRegistry(val, true);
+    triggerFlash();
+  }
+}
+
+function triggerFlash(){
+  flashAlphaCur = 0.85;
+  const id = setInterval(()=>{ 
+    flashAlphaCur = Math.max(0, flashAlphaCur - 0.06); 
+    if(flashAlphaCur<=0) clearInterval(id); 
+  }, 30);
+}
+
+// Registry & Logging Actions
 function populateFromRegistry(tag, fromScan){
   const key = tag.trim().toUpperCase();
   const asset = assets[key];
@@ -449,7 +472,7 @@ function populateFromRegistry(tag, fromScan){
     document.getElementById('tm-meta').textContent = [asset.type, asset.model, asset.serial?'S/N: '+asset.serial:''].filter(Boolean).join(' · ');
     card.classList.add('visible');
     if(fromScan){
-      ls.innerHTML = `<span style="color:#888;font-size:12px;">Scanned:</span> <span class="val">${escHtml(tag)}</span><span class="tool-detail">${escHtml(asset.name)}${asset.type?' · '+escHtml(asset.type):''}${asset.serial?' · S/N: '+escHtml(asset.serial):''}</span>`;
+      ls.innerHTML = `<span style="color:#888;font-size:12px;">Scanned:</span> <span class="val">${escHtml(tag)}</span><span class="tool-detail">${escHtml(asset.name)}</span>`;
       ls.classList.remove('flash'); void ls.offsetWidth; ls.classList.add('flash');
     }
   } else {
@@ -458,7 +481,7 @@ function populateFromRegistry(tag, fromScan){
     document.getElementById('f-serial').value = '';
     card.classList.remove('visible');
     if(fromScan){
-      ls.innerHTML = `<span style="color:#888;font-size:12px;">Scanned:</span> <span class="val">${escHtml(tag)}</span><span class="unregistered">Not in registry — fill in details below or add to registry first</span>`;
+      ls.innerHTML = `<span style="color:#888;font-size:12px;">Scanned:</span> <span class="val">${escHtml(tag)}</span><span class="unregistered">Not in registry</span>`;
       ls.classList.remove('flash'); void ls.offsetWidth; ls.classList.add('flash');
     }
   }
@@ -483,7 +506,6 @@ function addEntry(){
   ['f-tag','f-toolname','f-tooltype','f-serial','f-notes'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('tool-match-card').classList.remove('visible');
   document.getElementById('last-scan').innerHTML='<span>Waiting for scan…</span>';
-  lastScannedTag=null;
 }
 
 function renderLog(){
@@ -494,9 +516,9 @@ function renderLog(){
     const bc=e.action==='Check-In'?'badge-in':e.action==='Check-Out'?'badge-out':'badge-check';
     return `<tr>
       <td style="white-space:nowrap;color:#888;font-size:11px;">${escHtml(e.date)}<br>${escHtml(e.time)}</td>
-      <td><strong style="font-size:13px;">${escHtml(e.tag)}</strong></td>
+      <td><strong>${escHtml(e.tag)}</strong></td>
       <td style="font-size:12px;">${escHtml(e.toolname||'—')}</td>
-      <td>${e.tooltype?`<span class="badge badge-type">${escHtml(e.tooltype)}</span>`:'<span style="color:#ccc;font-size:12px;">—</span>'}</td>
+      <td>${e.tooltype?`<span class="badge badge-type">${escHtml(e.tooltype)}</span>`:'<span style="color:#ccc;">—</span>'}</td>
       <td style="font-size:11px;color:#888;">${escHtml(e.serial||'—')}</td>
       <td style="font-size:12px;">${escHtml(e.tech||'—')}</td>
       <td><span class="badge ${bc}">${escHtml(e.action)}</span></td>
@@ -512,7 +534,6 @@ function clearForm(){
   ['f-tag','f-toolname','f-tooltype','f-serial','f-notes','f-tech'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('tool-match-card').classList.remove('visible');
   document.getElementById('last-scan').innerHTML='<span>Waiting for scan…</span>';
-  lastScannedTag=null;
 }
 
 function clearLog(){ if(log.length&&confirm('Clear all '+log.length+' entries?')){ log.length=0; renderLog(); } }
@@ -526,28 +547,8 @@ function saveAsset(){
   renderAssets();
   const msg=document.getElementById('r-msg');
   msg.textContent=(isEdit?'Updated: ':'Saved: ')+tag+' — '+name;
-  msg.style.display='block'; msg.style.color='#3b6d11';
+  msg.style.display='block';
   setTimeout(()=>msg.style.display='none',3000);
-}
-
-function editAsset(tag){
-  const a=assets[tag]; if(!a) return;
-  document.getElementById('r-tag').value=a.tag;
-  document.getElementById('r-name').value=a.name;
-  document.getElementById('r-type').value=a.type||'';
-  document.getElementById('r-model').value=a.model||'';
-  document.getElementById('r-serial').value=a.serial||'';
-  document.getElementById('r-price').value=a.price||'';
-  document.getElementById('r-notes').value=a.notes||'';
-  document.querySelector('.tab[data-page="registry"]').click();
-  setTimeout(()=>document.getElementById('r-tag').focus(),100);
-}
-
-function deleteAsset(tag){ if(confirm('Remove '+tag+' from registry?')){ delete assets[tag]; renderAssets(); } }
-
-function clearRegistryForm(){
-  ['r-tag','r-name','r-model','r-serial','r-notes','r-price'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('r-type').value='';
 }
 
 function renderAssets(){
@@ -571,21 +572,34 @@ function renderAssets(){
   }).join('');
 }
 
+function editAsset(tag){
+  const a=assets[tag]; if(!a) return;
+  document.getElementById('r-tag').value=a.tag;
+  document.getElementById('r-name').value=a.name;
+  document.getElementById('r-type').value=a.type||'';
+  document.getElementById('r-model').value=a.model||'';
+  document.getElementById('r-serial').value=a.serial||'';
+  document.getElementById('r-price').value=a.price||'';
+  document.getElementById('r-notes').value=a.notes||'';
+  document.querySelector('.tab[data-page="registry"]').click();
+}
+
+function deleteAsset(tag){ if(confirm('Remove '+tag+' from registry?')){ delete assets[tag]; renderAssets(); } }
+
+function clearRegistryForm(){
+  ['r-tag','r-name','r-model','r-serial','r-notes','r-price'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('r-type').value='';
+}
+
+// PDF Export Logic
 function exportPDF(){
   if(!log.length){ alert('Nothing to export.'); return; }
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'letter'});
   const ds=document.getElementById('f-date').value||todayDate();
-  doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.text('WilliamSmith Fireplaces',14,16);
-  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(120);
-  doc.text('Tool Scan Log — '+ds,14,22);
-  doc.text('Exported: '+new Date().toLocaleString(),255,22,{align:'right'});
-  doc.setTextColor(0);
-  const rows=[...log].reverse().map(e=>[e.date+' '+e.time,e.tag,e.toolname||'—',e.tooltype||'—',e.serial||'—',e.tech||'—',e.action,e.notes||'—']);
-  doc.autoTable({startY:28,head:[['Date / Time','Tag','Tool name','Type','Serial #','Tech','Action','Notes']],body:rows,styles:{fontSize:8,cellPadding:2.5},headStyles:{fillColor:[26,26,24],textColor:244,fontStyle:'bold'},alternateRowStyles:{fillColor:[248,246,243]},columnStyles:{0:{cellWidth:30},1:{cellWidth:18,fontStyle:'bold'},2:{cellWidth:40},3:{cellWidth:24},4:{cellWidth:28},5:{cellWidth:26},6:{cellWidth:22},7:{cellWidth:'auto'}}});
-  const pc=doc.internal.getNumberOfPages();
-  for(let i=1;i<=pc;i++){ doc.setPage(i); doc.setFontSize(8); doc.setTextColor(160); doc.text('Page '+i+' of '+pc+' — WilliamSmith Fireplaces Tool Scan Log',14,doc.internal.pageSize.height-8); }
-  doc.save('tool-scan-log-'+ds+'.pdf');
+  doc.setFont('helvetica','bold'); doc.text('WilliamSmith Fireplaces Tool Log',14,16);
+  doc.autoTable({startY:25,head:[['Time','Tag','Tool','Type','Serial','Tech','Action','Notes']],body:log.map(e=>[e.time,e.tag,e.toolname,e.tooltype,e.serial,e.tech,e.action,e.notes])});
+  doc.save('tool-log-'+ds+'.pdf');
 }
 
 function exportRegistryPDF(){
@@ -593,20 +607,13 @@ function exportRegistryPDF(){
   if(!keys.length){ alert('No assets to export.'); return; }
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'letter'});
-  doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.text('WilliamSmith Fireplaces',14,16);
-  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(120);
-  doc.text('Asset Registry — '+keys.length+' tools',14,22);
-  doc.text('Exported: '+new Date().toLocaleString(),255,22,{align:'right'});
-  doc.setTextColor(0);
-  const rows=keys.map(k=>{const a=assets[k];return[a.tag,a.name,a.type||'—',a.model||'—',a.serial||'—',fmt$(a.price),a.notes||'—'];});
-  const total=keys.reduce((s,k)=>s+(parseFloat(assets[k].price)||0),0);
-  doc.autoTable({startY:28,head:[['Tag','Tool name','Type','Brand / model','Serial #','Value','Notes']],body:rows,styles:{fontSize:9,cellPadding:3},headStyles:{fillColor:[26,26,24],textColor:244,fontStyle:'bold'},alternateRowStyles:{fillColor:[248,246,243]},columnStyles:{0:{cellWidth:20,fontStyle:'bold'},1:{cellWidth:48},2:{cellWidth:28},3:{cellWidth:42},4:{cellWidth:32},5:{cellWidth:20},6:{cellWidth:'auto'}},foot:total?[['','','','','','Total','$'+total.toFixed(2)]]:undefined,footStyles:{fillColor:[26,26,24],textColor:244,fontStyle:'bold'}});
-  const pc=doc.internal.getNumberOfPages();
-  for(let i=1;i<=pc;i++){ doc.setPage(i); doc.setFontSize(8); doc.setTextColor(160); doc.text('Page '+i+' of '+pc+' — WilliamSmith Fireplaces Asset Registry',14,doc.internal.pageSize.height-8); }
+  doc.setFont('helvetica','bold'); doc.text('WilliamSmith Fireplaces Asset Registry',14,16);
+  doc.autoTable({startY:25,head:[['Tag','Name','Type','Model','Serial','Value']],body:keys.map(k=>{const a=assets[k];return[a.tag,a.name,a.type,a.model,a.serial,fmt$(a.price)]})});
   doc.save('asset-registry-'+todayDate()+'.pdf');
 }
 
 window.addEventListener('load', initCamera);
 </script>
+
 </body>
 </html>
