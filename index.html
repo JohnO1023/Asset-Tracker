@@ -71,7 +71,10 @@ button.small { padding: 0.3rem 0.65rem; font-size: 12px; }
 .asset-table tr:hover td { background: #faf8f5; }
 .type-pill { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; background: #f4f1ec; color: #555; border: 1px solid #e2ddd6; }
 #r-msg { font-size: 12px; margin-top: 0.5rem; display: none; }
-#camera-select { font-size: 12px; padding: 0.3rem 0.5rem; border: 1px solid #d0c9c0; border-radius: 5px; background: #fff; color: #1a1a18; width: 100%; margin-bottom: 4px; }
+#camera-select { font-size: 12px; padding: 0.3rem 0.5rem; border: 1px solid #d0c9c0; border-radius: 5px; background: #fff; color: #1a1a18; flex: 1; }
+.cam-controls { display: flex; gap: 6px; align-items: center; margin-bottom: 4px; }
+#torch-btn { padding: 0.3rem 0.8rem; font-size: 12px; border-radius: 5px; border: 1px solid #d0c9c0; background: #fff; cursor: pointer; display: none; white-space: nowrap; }
+#torch-btn.on { background: #faeeda; border-color: #854f0b; color: #854f0b; }
 </style>
 </head>
 <body>
@@ -93,7 +96,10 @@ button.small { padding: 0.3rem 0.65rem; font-size: 12px; }
     <div class="panel" style="margin-bottom:1.5rem;">
       <div class="panel-head">Camera</div>
       <div class="panel-body">
-        <select id="camera-select"><option>Starting camera…</option></select>
+        <div class="cam-controls">
+          <select id="camera-select"><option>Starting camera…</option></select>
+          <button id="torch-btn" onclick="toggleTorch()">&#9685; Flash</button>
+        </div>
         <div class="cam-wrap">
           <video id="preview" autoplay muted playsinline webkit-playsinline></video>
           <canvas id="guide-canvas"></canvas>
@@ -221,9 +227,10 @@ button.small { padding: 0.3rem 0.65rem; font-size: 12px; }
 const log = [];
 const assets = {};
 let lastScannedTag = null;
-let scanLoopId = null;
-let guideFrameId = null;
+let scanLoopId = null;   // requestAnimationFrame handle
+let guideFrameId = null; // requestAnimationFrame handle for overlay
 let flashAlpha = 0;
+let torchOn = false;
 let activeStream = null;
 const cropCanvas = document.createElement('canvas');
 const cropCtx = cropCanvas.getContext('2d', { willReadFrequently: true });
@@ -377,10 +384,14 @@ async function initCamera(){
 }
 
 function openCamera(deviceId){
-  // Stop any existing stream
   if(activeStream){ activeStream.getTracks().forEach(t => t.stop()); activeStream = null; }
-  if(scanLoopId){ clearInterval(scanLoopId); scanLoopId = null; }
+  if(scanLoopId){ cancelAnimationFrame(scanLoopId); scanLoopId = null; }
   if(guideFrameId){ cancelAnimationFrame(guideFrameId); guideFrameId = null; }
+
+  // Reset torch button
+  torchOn = false;
+  const tb = document.getElementById('torch-btn');
+  tb.classList.remove('on'); tb.style.display = 'none';
 
   const video = document.getElementById('preview');
   setStatus('Opening camera…');
@@ -388,8 +399,11 @@ function openCamera(deviceId){
   navigator.mediaDevices.getUserMedia({
     video: {
       deviceId: { exact: deviceId },
-      width:  { ideal: 1280 },
-      height: { ideal: 960 }
+      // Request 16:9 as ideal — matches most modern sensors natively.
+      // The getZone function uses videoWidth/videoHeight so any actual
+      // resolution the browser picks will map correctly.
+      width:  { ideal: 1920 },
+      height: { ideal: 1080 }
     }
   }).then(stream => {
     activeStream = stream;
@@ -397,6 +411,12 @@ function openCamera(deviceId){
     video.onloadeddata = () => {
       video.play();
       setStatus('');
+
+      // Show torch button only if this track supports it
+      const track = stream.getVideoTracks()[0];
+      const caps = track.getCapabilities ? track.getCapabilities() : {};
+      if(caps.torch) tb.style.display = 'block';
+
       drawGuide();
       startScanLoop(video);
     };
@@ -405,55 +425,112 @@ function openCamera(deviceId){
   });
 }
 
-// ── Scan loop ──────────────────────────────────────────────────────────
-// Fires every 300ms. Crops the live video frame to the guide zone only,
-// then passes that pixel data to ZXing. Nothing is saved to disk.
+// ── Torch toggle ───────────────────────────────────────────────────────
+let torchOn = false;
+async function toggleTorch(){
+  if(!activeStream) return;
+  const track = activeStream.getVideoTracks()[0];
+  const caps = track.getCapabilities ? track.getCapabilities() : {};
+  if(!caps.torch) return;
+  torchOn = !torchOn;
+  await track.applyConstraints({ advanced: [{ torch: torchOn }] });
+  const tb = document.getElementById('torch-btn');
+  tb.classList.toggle('on', torchOn);
+  tb.textContent = torchOn ? '⚡ Flash on' : '☽ Flash off';
+}
+
+// ── Scan loop (rAF-based, ~300ms throttle) ────────────────────────────
+// Uses requestAnimationFrame so decode is synced to screen refresh.
+// Throttled to ~300ms to avoid burning CPU. ZXing NotFoundException
+// is the normal "nothing found" signal — caught and ignored.
+// Actual errors (TypeError etc.) are logged to console.
 
 function startScanLoop(video){
-  // Create a fresh ZXing reader each time
   let reader;
-  try { reader = new ZXing.BrowserMultiFormatReader(); } catch(e){ setStatus('ZXing not loaded'); return; }
+  try { reader = new ZXing.BrowserMultiFormatReader(); }
+  catch(e){ setStatus('ZXing not loaded'); return; }
 
-  scanLoopId = setInterval(() => {
+  let lastDecodeTime = 0;
+  const THROTTLE_MS = 300;
+
+  function loop(timestamp){
+    scanLoopId = requestAnimationFrame(loop);
+    if(timestamp - lastDecodeTime < THROTTLE_MS) return;
     if(video.readyState < 2 || video.videoWidth === 0) return;
 
-    // Map guide zone from display coords → actual video pixel coords
+    lastDecodeTime = timestamp;
+
+    // ── Precise zone mapping ──────────────────────────────────────────
+    // The video element may display at a different aspect ratio than the
+    // native sensor (object-fit: cover). We must compute the crop in
+    // NATIVE pixel coords by accounting for the letterbox/pillarbox offset
+    // that object-fit: cover introduces.
+    const vW = video.videoWidth;
+    const vH = video.videoHeight;
     const rect = video.getBoundingClientRect();
-    if(!rect.width) return;
-    const { zx, zy, zW, zH } = getZone(rect.width, rect.height);
-    const scaleX = video.videoWidth  / rect.width;
-    const scaleY = video.videoHeight / rect.height;
-    const sx = Math.round(zx * scaleX);
-    const sy = Math.round(zy * scaleY);
+    const dispW = rect.width;
+    const dispH = rect.height;
+    if(!dispW || !dispH) return;
+
+    // Scale factor: how much of the video is actually visible after cover cropping
+    const videoAR = vW / vH;
+    const dispAR  = dispW / dispH;
+
+    let renderW, renderH, offsetX, offsetY;
+    if(videoAR > dispAR){
+      // Video is wider than display — pillarboxed (sides cropped)
+      renderH = vH;
+      renderW = vH * dispAR;
+      offsetX = (vW - renderW) / 2;
+      offsetY = 0;
+    } else {
+      // Video is taller than display — letterboxed (top/bottom cropped)
+      renderW = vW;
+      renderH = vW / dispAR;
+      offsetX = 0;
+      offsetY = (vH - renderH) / 2;
+    }
+
+    // Guide zone as fraction of display → actual video pixels
+    const { zx, zy, zW, zH } = getZone(dispW, dispH);
+    const scaleX = renderW / dispW;
+    const scaleY = renderH / dispH;
+    const sx = Math.round(offsetX + zx * scaleX);
+    const sy = Math.round(offsetY + zy * scaleY);
     const sw = Math.round(zW * scaleX);
     const sh = Math.round(zH * scaleY);
     if(sw < 20 || sh < 20) return;
 
     cropCanvas.width  = sw;
     cropCanvas.height = sh;
-    try {
-      cropCtx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
-    } catch(e){ return; }
+    try { cropCtx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh); }
+    catch(e){ return; }
 
     let imgData;
-    try { imgData = cropCtx.getImageData(0, 0, sw, sh); } catch(e){ return; }
+    try { imgData = cropCtx.getImageData(0, 0, sw, sh); }
+    catch(e){ return; }
 
-    // Run ZXing decode on cropped pixels
     try {
       const lum = new ZXing.RGBLuminanceSource(imgData.data, sw, sh);
       const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
       const result = reader.decodeBitmap(bmp);
       if(result){
         const val = result.getText();
-        if(val === lastScannedTag) return; // debounce same tag
+        if(val === lastScannedTag) return;
         lastScannedTag = val;
         setTimeout(() => { lastScannedTag = null; }, 2500);
         onScanHit(val);
       }
     } catch(e){
-      // ZXing throws when no barcode found — normal, ignore
+      // ZXing.NotFoundException is thrown on every empty frame — normal.
+      // Only log genuinely unexpected errors.
+      if(e && e.name !== 'NotFoundException' && !(e instanceof ZXing.NotFoundException)){
+        console.warn('Decode error:', e);
+      }
     }
-  }, 300);
+  }
+
+  scanLoopId = requestAnimationFrame(loop);
 }
 
 function onScanHit(val){
