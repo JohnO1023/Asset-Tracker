@@ -24,7 +24,10 @@ header span { font-size: 12px; opacity: 0.5; margin-left: auto; }
 .panel { background: #fff; border-radius: 10px; border: 1px solid #e2ddd6; overflow: hidden; }
 .panel-head { padding: 0.85rem 1.1rem; border-bottom: 1px solid #e2ddd6; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #888; display: flex; align-items: center; gap: 8px; }
 .panel-body { padding: 1.1rem; }
-#preview { width: 100%; border-radius: 6px; background: #111; aspect-ratio: 4/3; display: block; object-fit: cover; }
+.cam-wrap { position: relative; width: 100%; aspect-ratio: 4/3; border-radius: 6px; overflow: hidden; background: #111; margin-top: 0.75rem; }
+#preview { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+#guide-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.guide-hint { font-size: 11px; color: #aaa; text-align: center; margin-top: 6px; letter-spacing: 0.02em; }
 .scan-result { margin-top: 0.85rem; padding: 0.75rem 1rem; background: #f4f1ec; border-radius: 6px; font-size: 13px; color: #555; min-height: 48px; display: flex; flex-direction: column; gap: 4px; justify-content: center; }
 .scan-result .val { font-weight: 600; color: #1a1a18; font-size: 15px; }
 .scan-result .tool-detail { font-size: 12px; color: #666; }
@@ -94,7 +97,11 @@ button.small { padding: 0.3rem 0.65rem; font-size: 12px; }
       <div class="panel-head">Camera</div>
       <div class="panel-body">
         <select id="camera-select"><option>Loading cameras…</option></select>
-        <video id="preview" autoplay muted playsinline style="margin-top:0.75rem;"></video>
+        <div class="cam-wrap">
+          <video id="preview" autoplay muted playsinline></video>
+          <canvas id="guide-canvas"></canvas>
+        </div>
+        <div class="guide-hint">Align barcode inside the guide zone</div>
         <div class="scan-result" id="last-scan"><span>Waiting for scan…</span></div>
       </div>
     </div>
@@ -268,30 +275,164 @@ async function initCamera(){
     const devices = await codeReader.listVideoInputDevices();
     const sel = document.getElementById('camera-select');
     sel.innerHTML = '';
+    if(!devices.length){ sel.innerHTML='<option>No cameras found</option>'; return; }
     devices.forEach((d,i)=>{
       const o=document.createElement('option');
       o.value=d.deviceId; o.text=d.label||'Camera '+(i+1); sel.appendChild(o);
     });
-    if(devices.length){
-      const id=devices[devices.length>1?1:0].deviceId;
-      sel.value=id; startScan(id);
-    }
-    sel.onchange=()=>{ codeReader.reset(); startScan(sel.value); };
+    const id=devices[devices.length>1?1:0].deviceId;
+    sel.value=id; startScan(id);
+    sel.onchange=()=>{
+      const video=document.getElementById('preview');
+      if(video.srcObject) video.srcObject.getTracks().forEach(t=>t.stop());
+      if(scanIntervalId){ clearInterval(scanIntervalId); scanIntervalId=null; }
+      startScan(sel.value);
+    };
   } catch(e){
     document.getElementById('camera-select').innerHTML='<option>Camera unavailable</option>';
   }
 }
 
+let guideAnimFrame = null;
+let cropCanvas = null;
+let cropCtx = null;
+let scanIntervalId = null;
+
+function drawGuide(){
+  const gc = document.getElementById('guide-canvas');
+  const video = document.getElementById('preview');
+  if(!gc || !video) return;
+  const W = video.offsetWidth, H = video.offsetHeight;
+  if(!W || !H) { guideAnimFrame = requestAnimationFrame(drawGuide); return; }
+  gc.width = W; gc.height = H;
+  const ctx = gc.getContext('2d');
+  ctx.clearRect(0,0,W,H);
+
+  const zoneW = Math.round(W * 0.72);
+  const zoneH = Math.round(H * 0.38);
+  const zx = Math.round((W - zoneW) / 2);
+  const zy = Math.round((H - zoneH) / 2);
+
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.fillRect(0, 0, W, zy);
+  ctx.fillRect(0, zy + zoneH, W, H - zy - zoneH);
+  ctx.fillRect(0, zy, zx, zoneH);
+  ctx.fillRect(zx + zoneW, zy, W - zx - zoneW, zoneH);
+
+  const r = 10, t = 22, lw = 3;
+  ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+  ctx.lineWidth = lw;
+  ctx.lineCap = 'round';
+  const corners = [[zx,zy],[zx+zoneW,zy],[zx,zy+zoneH],[zx+zoneW,zy+zoneH]];
+  const dirs = [[1,0,0,1],[-1,0,0,1],[1,0,0,-1],[-1,0,0,-1]];
+  corners.forEach(([cx,cy],[dx,dy,ex,ey])=>{
+    ctx.beginPath(); ctx.moveTo(cx+dx*r,cy); ctx.lineTo(cx+dx*(r+t),cy); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx,cy+ey*r); ctx.lineTo(cx,cy+ey*(r+t)); ctx.stroke();
+  },null);
+  corners.forEach(([cx,cy],[dx,dy,ex,ey])=>{
+    ctx.beginPath();
+    ctx.moveTo(cx+dx*r,cy);
+    ctx.arcTo(cx,cy,cx,cy+ey*r,r);
+    ctx.stroke();
+  },null);
+
+  const scanLineY = zy + ((Date.now() % 1800) / 1800) * zoneH;
+  const grad = ctx.createLinearGradient(zx, scanLineY-6, zx, scanLineY+6);
+  grad.addColorStop(0,'rgba(255,255,255,0)');
+  grad.addColorStop(0.5,'rgba(255,255,255,0.55)');
+  grad.addColorStop(1,'rgba(255,255,255,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(zx, scanLineY-6, zoneW, 12);
+
+  guideAnimFrame = requestAnimationFrame(drawGuide);
+}
+
+function getGuideZone(){
+  const video = document.getElementById('preview');
+  const W = video.offsetWidth, H = video.offsetHeight;
+  const vW = video.videoWidth, vH = video.videoHeight;
+  if(!vW || !vH || !W || !H) return null;
+  const scaleX = vW / W, scaleY = vH / H;
+  const zoneW = Math.round(W * 0.72);
+  const zoneH = Math.round(H * 0.38);
+  const zx = Math.round((W - zoneW) / 2);
+  const zy = Math.round((H - zoneH) / 2);
+  return { sx: Math.round(zx*scaleX), sy: Math.round(zy*scaleY), sw: Math.round(zoneW*scaleX), sh: Math.round(zoneH*scaleY) };
+}
+
 function startScan(deviceId){
-  codeReader.decodeFromVideoDevice(deviceId, document.getElementById('preview'), (result)=>{
-    if(!result) return;
-    const val = result.getText();
-    if(val===lastScannedTag) return;
-    lastScannedTag=val;
-    setTimeout(()=>{ lastScannedTag=null; }, 2500);
-    document.getElementById('f-tag').value = val;
-    populateFromRegistry(val, true);
+  if(guideAnimFrame){ cancelAnimationFrame(guideAnimFrame); guideAnimFrame=null; }
+  if(scanIntervalId){ clearInterval(scanIntervalId); scanIntervalId=null; }
+  if(!cropCanvas){ cropCanvas=document.createElement('canvas'); cropCtx=cropCanvas.getContext('2d'); }
+
+  const video = document.getElementById('preview');
+
+  navigator.mediaDevices.getUserMedia({video:{deviceId:{exact:deviceId},facingMode:'environment',width:{ideal:1280},height:{ideal:960}}})
+  .then(stream=>{
+    video.srcObject=stream;
+    video.onloadedmetadata=()=>{
+      video.play();
+      drawGuide();
+      const hints = new Map();
+      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+      const reader = new ZXing.BrowserMultiFormatReader(hints);
+
+      scanIntervalId = setInterval(async ()=>{
+        if(video.readyState < 2) return;
+        const zone = getGuideZone();
+        if(!zone) return;
+        cropCanvas.width = zone.sw; cropCanvas.height = zone.sh;
+        cropCtx.drawImage(video, zone.sx, zone.sy, zone.sw, zone.sh, 0, 0, zone.sw, zone.sh);
+        try {
+          const imgData = cropCtx.getImageData(0,0,zone.sw,zone.sh);
+          const lum = new ZXing.RGBLuminanceSource(imgData.data, zone.sw, zone.sh);
+          const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
+          const result = reader.decodeBitmap(bmp);
+          if(result){
+            const val = result.getText();
+            if(val===lastScannedTag) return;
+            lastScannedTag=val;
+            setTimeout(()=>{ lastScannedTag=null; }, 2500);
+            document.getElementById('f-tag').value = val;
+            populateFromRegistry(val, true);
+            flashGuide();
+          }
+        } catch(e){}
+      }, 200);
+    };
+  })
+  .catch(()=>{
+    codeReader.decodeFromVideoDevice(deviceId, video, (result)=>{
+      if(!result) return;
+      const val = result.getText();
+      if(val===lastScannedTag) return;
+      lastScannedTag=val;
+      setTimeout(()=>{ lastScannedTag=null; }, 2500);
+      document.getElementById('f-tag').value = val;
+      populateFromRegistry(val, true);
+    });
   });
+}
+
+function flashGuide(){
+  const gc = document.getElementById('guide-canvas');
+  if(!gc) return;
+  const W=gc.width, H=gc.height;
+  const zoneW=Math.round(W*0.72), zoneH=Math.round(H*0.38);
+  const zx=Math.round((W-zoneW)/2), zy=Math.round((H-zoneH)/2);
+  const ctx=gc.getContext('2d');
+  let alpha=0.6;
+  const fade=()=>{
+    ctx.save();
+    ctx.globalCompositeOperation='source-over';
+    ctx.strokeStyle=`rgba(100,200,80,${alpha})`;
+    ctx.lineWidth=3;
+    ctx.strokeRect(zx+2,zy+2,zoneW-4,zoneH-4);
+    ctx.restore();
+    alpha-=0.06;
+    if(alpha>0) requestAnimationFrame(fade);
+  };
+  fade();
 }
 
 function populateFromRegistry(tag, fromScan){
