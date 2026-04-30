@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WilliamSmith Fireplaces — Tool Scanner</title>
+    <!-- Libraries -->
+    <script src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f4f1ec; color: #1a1a18; min-height: 100vh; }
+        header { background: #1a1a18; color: #f4f1ec; padding: 1rem 1.5rem; display: flex; align-items: center; gap: 12px; }
+        header h1 { font-size: 15px; font-weight: 500; letter-spacing: 0.03em; }
+        header span { font-size: 12px; opacity: 0.5; margin-left: auto; }
+        
+        .layout { display: grid; grid-template-columns: 340px 1fr; gap: 1.5rem; padding: 1.5rem; max-width: 1100px; margin: 0 auto; }
+        @media (max-width: 800px) { .layout { grid-template-columns: 1fr; padding: 1rem; } }
+        
+        .panel { background: #fff; border-radius: 10px; border: 1px solid #e2ddd6; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .panel-head { padding: 0.85rem 1.1rem; border-bottom: 1px solid #e2ddd6; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #888; background: #faf9f7; }
+        .panel-body { padding: 1.1rem; }
+        
+        #preview { width: 100%; border-radius: 6px; background: #000; aspect-ratio: 4/3; display: block; object-fit: cover; }
+        .scan-result { margin-top: 0.85rem; padding: 0.75rem 1rem; background: #f4f1ec; border-radius: 6px; font-size: 13px; min-height: 42px; display: flex; align-items: center; gap: 8px; transition: background 0.3s; }
+        .scan-result.flash { background: #eaf3de; }
+        .scan-result .val { font-weight: 600; color: #1a1a18; font-size: 15px; }
+        
+        .field-row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 1rem; }
+        .field-row label { font-size: 12px; color: #888; font-weight: 500; }
+        .field-row input, .field-row select { padding: 0.6rem 0.75rem; border: 1px solid #d0c9c0; border-radius: 6px; font-size: 14px; background: #fff; }
+        
+        .controls { display: flex; gap: 8px; margin-top: 1rem; }
+        button { flex: 1; padding: 0.7rem; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid #d0c9c0; background: #fff; }
+        button.primary { background: #1a1a18; color: #f4f1ec; border-color: #1a1a18; }
+        
+        .log-table-container { overflow-x: auto; }
+        .log-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .log-table th { text-align: left; padding: 0.75rem; border-bottom: 1px solid #e2ddd6; color: #888; font-size: 11px; text-transform: uppercase; }
+        .log-table td { padding: 0.75rem; border-bottom: 1px solid #f0ece6; }
+        
+        .badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+        .badge-in { background: #eaf3de; color: #3b6d11; }
+        .badge-out { background: #faeeda; color: #854f0b; }
+        
+        .toolbar { padding: 1rem; border-top: 1px solid #e2ddd6; display: flex; justify-content: space-between; align-items: center; }
+        #camera-select { width: 100%; margin-bottom: 0.5rem; font-size: 12px; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>WilliamSmith Tool Scanner</h1>
+    <span id="clock">00:00:00</span>
+</header>
+
+<div class="layout">
+    <div class="side">
+        <div class="panel" style="margin-bottom: 1.5rem;">
+            <div class="panel-head">Scanner</div>
+            <div class="panel-body">
+                <select id="camera-select"><option>Initializing cameras...</option></select>
+                <video id="preview" playsinline muted></video>
+                <div class="scan-result" id="last-scan">
+                    <span>Ready to scan...</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-head">Manual Entry</div>
+            <div class="panel-body">
+                <div class="field-row">
+                    <label>Asset Tag</label>
+                    <input type="text" id="f-tag" placeholder="Scan or type...">
+                </div>
+                <div class="field-row">
+                    <label>Technician</label>
+                    <input type="text" id="f-tech" placeholder="Name">
+                </div>
+                <div class="field-row">
+                    <label>Action</label>
+                    <select id="f-action">
+                        <option value="Check-Out">Check-Out</option>
+                        <option value="Check-In">Check-In</option>
+                    </select>
+                </div>
+                <button class="primary" onclick="addEntry()">+ Add Entry</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="main">
+        <div class="panel">
+            <div class="panel-head">History</div>
+            <div class="log-table-container">
+                <table class="log-table">
+                    <thead>
+                        <tr><th>Time</th><th>Tag</th><th>Tech</th><th>Action</th><th></th></tr>
+                    </thead>
+                    <tbody id="log-body"></tbody>
+                </table>
+            </div>
+            <div class="toolbar">
+                <span id="entry-count" style="font-size: 12px; color: #888;">0 entries</span>
+                <div style="display:flex; gap:8px;">
+                    <button onclick="exportPDF()" style="padding: 4px 12px;">Export PDF</button>
+                    <button onclick="clearLog()" style="color: #a32d2d; padding: 4px 12px;">Clear All</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let log = JSON.parse(localStorage.getItem('tool_log') || '[]');
+    let codeReader = null;
+    let selectedDeviceId = null;
+
+    // Clock
+    setInterval(() => {
+        const d = new Date();
+        document.getElementById('clock').textContent = d.toTimeString().split(' ')[0];
+    }, 1000);
+
+    async function initCamera() {
+        if (typeof ZXing === 'undefined') { setTimeout(initCamera, 200); return; }
+        codeReader = new ZXing.BrowserMultiFormatReader();
+        
+        try {
+            const devices = await codeReader.listVideoInputDevices();
+            const sel = document.getElementById('camera-select');
+            sel.innerHTML = '';
+
+            // Smart camera selection: Prefer "back" or "environment" camera
+            const backCam = devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('environment'));
+            selectedDeviceId = backCam ? backCam.deviceId : (devices[0] ? devices[0].deviceId : null);
+
+            devices.forEach(d => {
+                const opt = document.createElement('option');
+                opt.value = d.deviceId;
+                opt.text = d.label || 'Camera ' + d.deviceId.substring(0,4);
+                if(d.deviceId === selectedDeviceId) opt.selected = true;
+                sel.appendChild(opt);
+            });
+
+            if (selectedDeviceId) startScan(selectedDeviceId);
+
+            sel.onchange = () => {
+                selectedDeviceId = sel.value;
+                codeReader.reset();
+                startScan(selectedDeviceId);
+            };
+        } catch (e) {
+            document.getElementById('camera-select').innerHTML = '<option>Access Denied (Check HTTPS)</option>';
+        }
+    }
+
+    function startScan(deviceId) {
+        const video = document.getElementById('preview');
+        codeReader.decodeFromVideoDevice(deviceId, video, (result, err) => {
+            if (result) {
+                const val = result.getText();
+                document.getElementById('f-tag').value = val;
+                
+                // Visual feedback
+                const ls = document.getElementById('last-scan');
+                ls.innerHTML = `<span>Scanned:</span> <span class="val">${val}</span>`;
+                ls.classList.add('flash');
+                setTimeout(() => ls.classList.remove('flash'), 500);
+                
+                // Optional: Auto-add entry on scan if tech is filled
+                if(document.getElementById('f-tech').value) addEntry();
+            }
+        });
+    }
+
+    function addEntry() {
+        const tag = document.getElementById('f-tag').value.trim();
+        const tech = document.getElementById('f-tech').value.trim();
+        const action = document.getElementById('f-action').value;
+        if (!tag) return alert('No asset tag found.');
+
+        const entry = {
+            id: Date.now(),
+            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+            date: new Date().toLocaleDateString(),
+            tag, tech, action
+        };
+
+        log.unshift(entry);
+        localStorage.setItem('tool_log', JSON.stringify(log));
+        renderLog();
+        document.getElementById('f-tag').value = '';
+    }
+
+    function renderLog() {
+        const tbody = document.getElementById('log-body');
+        document.getElementById('entry-count').textContent = log.length + ' entries';
+        
+        tbody.innerHTML = log.map(e => `
+            <tr>
+                <td style="color:#888; font-size:11px;">${e.time}</td>
+                <td><strong>${e.tag}</strong></td>
+                <td>${e.tech || '—'}</td>
+                <td><span class="badge ${e.action === 'Check-In' ? 'badge-in' : 'badge-out'}">${e.action}</span></td>
+                <td><button onclick="removeEntry(${e.id})" style="border:none; color:#ccc;">✕</button></td>
+            </tr>
+        `).join('');
+    }
+
+    function removeEntry(id) {
+        log = log.filter(e => e.id !== id);
+        localStorage.setItem('tool_log', JSON.stringify(log));
+        renderLog();
+    }
+
+    function clearLog() {
+        if (confirm('Delete all entries?')) {
+            log = [];
+            localStorage.removeItem('tool_log');
+            renderLog();
+        }
+    }
+
+    async function exportPDF() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        doc.text("Tool Scan Log - " + new Date().toLocaleDateString(), 14, 15);
+        
+        const rows = log.map(e => [e.date + ' ' + e.time, e.tag, e.tech, e.action]);
+        doc.autoTable({
+            startY: 20,
+            head: [['Date/Time', 'Asset Tag', 'Technician', 'Action']],
+            body: rows,
+        });
+        doc.save(`tools-${new Date().toISOString().slice(0,10)}.pdf`);
+    }
+
+    window.onload = () => {
+        renderLog();
+        initCamera();
+    };
+</script>
+</body>
+</html>
