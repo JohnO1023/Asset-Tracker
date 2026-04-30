@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WilliamSmith Fireplaces — Tool Scanner</title>
-<script src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <style>
@@ -24,13 +23,14 @@ header span { font-size: 12px; opacity: 0.5; margin-left: auto; }
 .panel { background: #fff; border-radius: 10px; border: 1px solid #e2ddd6; overflow: hidden; }
 .panel-head { padding: 0.85rem 1.1rem; border-bottom: 1px solid #e2ddd6; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #888; display: flex; align-items: center; gap: 8px; }
 .panel-body { padding: 1.1rem; }
-.cam-wrap { position: relative; width: 100%; aspect-ratio: 4/3; border-radius: 6px; overflow: hidden; background: #111; margin-top: 0.75rem; }
-#preview { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
-#guide-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.guide-hint { font-size: 11px; color: #aaa; text-align: center; margin-top: 6px; letter-spacing: 0.02em; }
-.scan-result { margin-top: 0.85rem; padding: 0.75rem 1rem; background: #f4f1ec; border-radius: 6px; font-size: 13px; color: #555; min-height: 48px; display: flex; flex-direction: column; gap: 4px; justify-content: center; }
+.cam-wrap { position: relative; width: 100%; aspect-ratio: 4/3; background: #111; border-radius: 6px; overflow: hidden; margin-top: 0.75rem; }
+#preview { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+#guide-canvas { position: absolute; inset: 0; pointer-events: none; }
+.guide-hint { font-size: 11px; color: #aaa; text-align: center; margin-top: 5px; }
+#cam-status { font-size: 11px; color: #888; margin-top: 4px; text-align: center; min-height: 16px; }
+.scan-result { margin-top: 0.75rem; padding: 0.75rem 1rem; background: #f4f1ec; border-radius: 6px; font-size: 13px; min-height: 48px; display: flex; flex-direction: column; gap: 3px; justify-content: center; }
 .scan-result .val { font-weight: 600; color: #1a1a18; font-size: 15px; }
-.scan-result .tool-detail { font-size: 12px; color: #666; }
+.scan-result .tool-detail { font-size: 12px; color: #555; }
 .scan-result .unregistered { font-size: 11px; color: #e24b4a; font-style: italic; }
 .controls { display: flex; gap: 8px; margin-top: 0.85rem; }
 button { padding: 0.55rem 1rem; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid #d0c9c0; background: #fff; color: #1a1a18; transition: background 0.15s; }
@@ -46,7 +46,7 @@ button.small { padding: 0.3rem 0.65rem; font-size: 12px; }
 .field-row input:focus, .field-row select:focus { outline: 2px solid #1a1a18; outline-offset: 1px; }
 .tool-match-card { background: #f0f7ec; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 0.85rem; border-left: 3px solid #3b6d11; display: none; }
 .tool-match-card.visible { display: block; }
-.tool-match-card .tm-name { font-weight: 600; font-size: 14px; color: #1a1a18; }
+.tool-match-card .tm-name { font-weight: 600; font-size: 14px; }
 .tool-match-card .tm-meta { font-size: 12px; color: #666; margin-top: 3px; }
 .log-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .log-table th { text-align: left; padding: 0.5rem 0.75rem; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #888; border-bottom: 1px solid #e2ddd6; }
@@ -61,9 +61,6 @@ button.small { padding: 0.3rem 0.65rem; font-size: 12px; }
 .empty { padding: 2rem; text-align: center; color: #aaa; font-size: 13px; }
 .toolbar { display: flex; gap: 8px; padding: 0.85rem 1.1rem; border-top: 1px solid #e2ddd6; align-items: center; flex-wrap: wrap; }
 .toolbar .count { font-size: 12px; color: #888; margin-right: auto; }
-.flash { animation: flashbg 0.6s ease; }
-@keyframes flashbg { 0% { background: #d6edca; } 100% { background: #f4f1ec; } }
-#camera-select { font-size: 12px; padding: 0.3rem 0.5rem; border: 1px solid #d0c9c0; border-radius: 5px; background: #fff; color: #1a1a18; max-width: 220px; margin-bottom: 10px; }
 .registry-page { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
 .registry-grid { display: grid; grid-template-columns: 360px 1fr; gap: 1.5rem; }
 @media (max-width: 700px) { .registry-grid { grid-template-columns: 1fr; } }
@@ -73,7 +70,8 @@ button.small { padding: 0.3rem 0.65rem; font-size: 12px; }
 .asset-table tr:last-child td { border-bottom: none; }
 .asset-table tr:hover td { background: #faf8f5; }
 .type-pill { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; background: #f4f1ec; color: #555; border: 1px solid #e2ddd6; }
-#r-msg { font-size: 12px; margin-top: 0.5rem; color: #3b6d11; display: none; }
+#r-msg { font-size: 12px; margin-top: 0.5rem; display: none; }
+#camera-select { font-size: 12px; padding: 0.3rem 0.5rem; border: 1px solid #d0c9c0; border-radius: 5px; background: #fff; color: #1a1a18; width: 100%; margin-bottom: 4px; }
 </style>
 </head>
 <body>
@@ -89,22 +87,23 @@ button.small { padding: 0.3rem 0.65rem; font-size: 12px; }
   <div class="tab" data-page="registry" onclick="showTab(this)">Asset Registry</div>
 </div>
 
-<!-- SCANNER PAGE -->
 <div id="page-scanner" class="page active">
 <div class="layout">
   <div>
     <div class="panel" style="margin-bottom:1.5rem;">
       <div class="panel-head">Camera</div>
       <div class="panel-body">
-        <select id="camera-select"><option>Loading cameras…</option></select>
+        <select id="camera-select"><option>Starting camera…</option></select>
         <div class="cam-wrap">
-          <video id="preview" autoplay muted playsinline></video>
+          <video id="preview" autoplay muted playsinline webkit-playsinline></video>
           <canvas id="guide-canvas"></canvas>
         </div>
-        <div class="guide-hint">Align barcode inside the guide zone</div>
-        <div class="scan-result" id="last-scan"><span>Waiting for scan…</span></div>
+        <div class="guide-hint">Align ONE barcode inside the guide zone</div>
+        <div id="cam-status"></div>
+        <div class="scan-result" id="last-scan"><span style="color:#aaa;">Waiting for scan…</span></div>
       </div>
     </div>
+
     <div class="panel">
       <div class="panel-head">Log entry</div>
       <div class="panel-body">
@@ -118,15 +117,15 @@ button.small { padding: 0.3rem 0.65rem; font-size: 12px; }
         </div>
         <div class="field-row">
           <label>Tool name</label>
-          <input type="text" id="f-toolname" placeholder="Auto-filled from registry or enter manually" />
+          <input type="text" id="f-toolname" placeholder="Auto-filled or enter manually" />
         </div>
         <div class="field-row">
           <label>Tool type / category</label>
-          <input type="text" id="f-tooltype" placeholder="Auto-filled from registry or enter manually" />
+          <input type="text" id="f-tooltype" placeholder="Auto-filled or enter manually" />
         </div>
         <div class="field-row">
           <label>Serial number</label>
-          <input type="text" id="f-serial" placeholder="Auto-filled from registry or enter manually" />
+          <input type="text" id="f-serial" placeholder="Auto-filled or enter manually" />
         </div>
         <div class="field-row">
           <label>Tech / assigned to</label>
@@ -159,8 +158,8 @@ button.small { padding: 0.3rem 0.65rem; font-size: 12px; }
     </div>
     <div style="flex:1;overflow-x:auto;min-height:300px;">
       <table class="log-table">
-        <thead><tr><th>Time</th><th>Tag</th><th>Tool</th><th>Type</th><th>Serial #</th><th>Tech</th><th>Action</th><th>Notes</th><th></th></tr></thead>
-        <tbody id="log-body"><tr><td colspan="9" class="empty">No entries yet. Scan a barcode or add manually.</td></tr></tbody>
+        <thead><tr><th>Time</th><th>Tag</th><th>Tool</th><th>Type</th><th>Serial</th><th>Tech</th><th>Action</th><th>Notes</th><th></th></tr></thead>
+        <tbody id="log-body"><tr><td colspan="9" class="empty">No entries yet.</td></tr></tbody>
       </table>
     </div>
     <div class="toolbar">
@@ -172,52 +171,27 @@ button.small { padding: 0.3rem 0.65rem; font-size: 12px; }
 </div>
 </div>
 
-<!-- REGISTRY PAGE -->
 <div id="page-registry" class="page">
 <div class="registry-page">
   <div class="registry-grid">
     <div class="panel">
       <div class="panel-head">Add / edit asset</div>
       <div class="panel-body">
-        <div class="field-row">
-          <label>Asset tag (BB-###)</label>
-          <input type="text" id="r-tag" placeholder="BB-001" />
-        </div>
-        <div class="field-row">
-          <label>Tool name</label>
-          <input type="text" id="r-name" placeholder="e.g. Combustion Analyzer" />
-        </div>
+        <div class="field-row"><label>Asset tag (BB-###)</label><input type="text" id="r-tag" placeholder="BB-001" /></div>
+        <div class="field-row"><label>Tool name</label><input type="text" id="r-name" placeholder="e.g. Combustion Analyzer" /></div>
         <div class="field-row">
           <label>Tool type / category</label>
           <select id="r-type">
             <option value="">— select —</option>
-            <option>Test Equipment</option>
-            <option>Power Tool</option>
-            <option>Hand Tool</option>
-            <option>Measuring</option>
-            <option>Safety</option>
-            <option>Ladder / Access</option>
-            <option>Venting / Install</option>
-            <option>Camera / Inspection</option>
-            <option>Other</option>
+            <option>Test Equipment</option><option>Power Tool</option><option>Hand Tool</option>
+            <option>Measuring</option><option>Safety</option><option>Ladder / Access</option>
+            <option>Venting / Install</option><option>Camera / Inspection</option><option>Other</option>
           </select>
         </div>
-        <div class="field-row">
-          <label>Brand / model</label>
-          <input type="text" id="r-model" placeholder="e.g. Bacharach Insight Plus" />
-        </div>
-        <div class="field-row">
-          <label>Serial number</label>
-          <input type="text" id="r-serial" placeholder="Manufacturer S/N" />
-        </div>
-        <div class="field-row">
-          <label>Purchase price ($)</label>
-          <input type="number" id="r-price" placeholder="0.00" step="0.01" min="0" />
-        </div>
-        <div class="field-row">
-          <label>Notes</label>
-          <input type="text" id="r-notes" placeholder="Condition, truck assignment, etc." />
-        </div>
+        <div class="field-row"><label>Brand / model</label><input type="text" id="r-model" placeholder="e.g. Bacharach Insight Plus" /></div>
+        <div class="field-row"><label>Serial number</label><input type="text" id="r-serial" placeholder="Manufacturer S/N" /></div>
+        <div class="field-row"><label>Purchase price ($)</label><input type="number" id="r-price" placeholder="0.00" step="0.01" min="0" /></div>
+        <div class="field-row"><label>Notes</label><input type="text" id="r-notes" placeholder="Condition, truck assignment, etc." /></div>
         <div class="controls">
           <button class="primary" onclick="saveAsset()">Save asset</button>
           <button onclick="clearRegistryForm()">Clear</button>
@@ -225,15 +199,11 @@ button.small { padding: 0.3rem 0.65rem; font-size: 12px; }
         <div id="r-msg"></div>
       </div>
     </div>
-
     <div class="panel" style="display:flex;flex-direction:column;">
-      <div class="panel-head">
-        Registered assets
-        <span style="margin-left:auto;font-size:11px;color:#aaa;" id="asset-count">0 assets</span>
-      </div>
+      <div class="panel-head">Registered assets <span style="margin-left:auto;font-size:11px;color:#aaa;" id="asset-count">0 assets</span></div>
       <div style="flex:1;overflow-x:auto;">
         <table class="asset-table">
-          <thead><tr><th>Tag</th><th>Tool name</th><th>Type</th><th>Brand / model</th><th>Serial #</th><th>Value</th><th></th></tr></thead>
+          <thead><tr><th>Tag</th><th>Tool name</th><th>Type</th><th>Brand / model</th><th>Serial</th><th>Value</th><th></th></tr></thead>
           <tbody id="asset-body"><tr><td colspan="7" class="empty">No assets registered yet.</td></tr></tbody>
         </table>
       </div>
@@ -247,30 +217,29 @@ button.small { padding: 0.3rem 0.65rem; font-size: 12px; }
 </div>
 
 <script>
-// State Management
+// ── State ──────────────────────────────────────────────────────────────
 const log = [];
 const assets = {};
 let lastScannedTag = null;
-let scanIntervalId = null;
-let guideAnimFrame = null;
-let flashAlphaCur = 0;
+let scanLoopId = null;
+let guideFrameId = null;
+let flashAlpha = 0;
+let activeStream = null;
+const cropCanvas = document.createElement('canvas');
+const cropCtx = cropCanvas.getContext('2d', { willReadFrequently: true });
 
-// Canvas setup
-let cropCanvas = document.createElement('canvas');
-let cropCtx = cropCanvas.getContext('2d', { willReadFrequently: true });
-let zxReader = new ZXing.BrowserMultiFormatReader();
+// ── Utilities ──────────────────────────────────────────────────────────
+const pad = n => String(n).padStart(2,'0');
+const nowTime = () => { const d=new Date(); return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds()); };
+const todayDate = () => { const d=new Date(); return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); };
+const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const fmt$ = v => (v && parseFloat(v)) ? '$'+parseFloat(v).toFixed(2) : '—';
+const setStatus = msg => { document.getElementById('cam-status').textContent = msg; };
 
-// Utility Functions
-function pad(n){ return String(n).padStart(2,'0'); }
-function nowTime(){ const d=new Date(); return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds()); }
-function todayDate(){ const d=new Date(); return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
-function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function fmt$(v){ return (v&&parseFloat(v))?'$'+parseFloat(v).toFixed(2):'—'; }
-
-// Init
 document.getElementById('f-date').value = todayDate();
-setInterval(()=>{ document.getElementById('clock').textContent = nowTime(); }, 1000);
+setInterval(() => { document.getElementById('clock').textContent = nowTime(); }, 1000);
 
+// ── Tab switching ──────────────────────────────────────────────────────
 function showTab(el){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
@@ -278,186 +247,223 @@ function showTab(el){
   document.getElementById('page-'+el.dataset.page).classList.add('active');
 }
 
-// Camera & Scanning Logic
-async function initCamera(){
-  if(typeof ZXing==='undefined'){ setTimeout(initCamera,300); return; }
-  try {
-    const devices = await zxReader.listVideoInputDevices();
-    const sel = document.getElementById('camera-select');
-    sel.innerHTML = '';
-    
-    if(!devices.length){ sel.innerHTML='<option>No cameras found</option>'; return; }
-    
-    devices.forEach((d,i)=>{
-      const o=document.createElement('option');
-      o.value=d.deviceId; o.text=d.label||'Camera '+(i+1); sel.appendChild(o);
-    });
-    
-    // Default to back camera if possible
-    const backCam = devices.find(d => d.label.toLowerCase().includes('back'));
-    const initialId = backCam ? backCam.deviceId : devices[0].deviceId;
-    sel.value = initialId;
-    
-    startScan(initialId);
-    
-    sel.onchange=()=>{
-      const video=document.getElementById('preview');
-      if(video.srcObject) video.srcObject.getTracks().forEach(t=>t.stop());
-      startScan(sel.value);
-    };
-  } catch(e){
-    document.getElementById('camera-select').innerHTML='<option>Camera unavailable</option>';
-  }
-}
-
+// ── Guide zone overlay ─────────────────────────────────────────────────
 function getZone(W, H){
-  const zW = Math.round(W * 0.78);
-  const zH = Math.round(H * 0.36);
+  const zW = Math.round(W * 0.8);
+  const zH = Math.round(H * 0.38);
   return { zx: Math.round((W-zW)/2), zy: Math.round((H-zH)/2), zW, zH };
 }
 
-function drawCorner(ctx, cx, cy, dx, dy, t, r){
+function drawCorner(ctx, cx, cy, dx, dy, arm, rad){
   ctx.beginPath();
-  ctx.moveTo(cx + dx*(r+t), cy);
-  ctx.lineTo(cx + dx*r, cy);
-  ctx.arcTo(cx, cy, cx, cy + dy*r, r);
-  ctx.lineTo(cx, cy + dy*(r+t));
+  ctx.moveTo(cx + dx*(rad+arm), cy);
+  ctx.lineTo(cx + dx*rad, cy);
+  ctx.arcTo(cx, cy, cx, cy+dy*rad, rad);
+  ctx.lineTo(cx, cy + dy*(rad+arm));
   ctx.stroke();
 }
 
 function drawGuide(){
   const gc = document.getElementById('guide-canvas');
   const video = document.getElementById('preview');
-  if(!gc || !video) return;
+  if(!gc || !video){ guideFrameId = requestAnimationFrame(drawGuide); return; }
+
+  // Size canvas to match video display size
   const rect = video.getBoundingClientRect();
-  const W = Math.round(rect.width);
-  const H = Math.round(rect.height);
-  if(!W || !H){ guideAnimFrame = requestAnimationFrame(drawGuide); return; }
+  const W = rect.width, H = rect.height;
+  if(!W || !H){ guideFrameId = requestAnimationFrame(drawGuide); return; }
 
   const dpr = window.devicePixelRatio || 1;
-  gc.width = W * dpr;
-  gc.height = H * dpr;
-  gc.style.width = W + 'px';
-  gc.style.height = H + 'px';
+  if(gc.width !== Math.round(W*dpr) || gc.height !== Math.round(H*dpr)){
+    gc.width = Math.round(W * dpr);
+    gc.height = Math.round(H * dpr);
+    gc.style.width = W + 'px';
+    gc.style.height = H + 'px';
+  }
 
   const ctx = gc.getContext('2d');
-  ctx.scale(dpr, dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
 
   const { zx, zy, zW, zH } = getZone(W, H);
 
-  // Dim background
-  ctx.fillStyle = 'rgba(0,0,0,0.52)';
+  // Dim everything outside zone
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
   ctx.fillRect(0, 0, W, zy);
-  ctx.fillRect(0, zy + zH, W, H - zy - zH);
+  ctx.fillRect(0, zy+zH, W, H-zy-zH);
   ctx.fillRect(0, zy, zx, zH);
-  ctx.fillRect(zx + zW, zy, W - zx - zW, zH);
+  ctx.fillRect(zx+zW, zy, W-zx-zW, zH);
 
-  if(flashAlphaCur > 0){
-    ctx.strokeStyle = `rgba(80,210,80,${flashAlphaCur})`;
-    ctx.lineWidth = 2.5;
-    ctx.strokeRect(zx+1, zy+1, zW-2, zH-2);
+  // Green flash on successful scan
+  if(flashAlpha > 0){
+    ctx.strokeStyle = `rgba(60,200,60,${flashAlpha})`;
+    ctx.lineWidth = 3;
+    ctx.strokeRect(zx+2, zy+2, zW-4, zH-4);
+    flashAlpha = Math.max(0, flashAlpha - 0.04);
   }
 
-  // Corners
-  const t = 20, r = 8;
-  ctx.strokeStyle = 'rgba(255,255,255,0.92)';
+  // Corner brackets
+  ctx.strokeStyle = 'rgba(255,255,255,0.95)';
   ctx.lineWidth = 2.5;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  drawCorner(ctx, zx,    zy,     1,  1, t, r);
-  drawCorner(ctx, zx+zW, zy,    -1,  1, t, r);
-  drawCorner(ctx, zx,    zy+zH,  1, -1, t, r);
-  drawCorner(ctx, zx+zW, zy+zH, -1, -1, t, r);
+  drawCorner(ctx, zx,    zy,     1,  1, 18, 7);
+  drawCorner(ctx, zx+zW, zy,    -1,  1, 18, 7);
+  drawCorner(ctx, zx,    zy+zH,  1, -1, 18, 7);
+  drawCorner(ctx, zx+zW, zy+zH, -1, -1, 18, 7);
 
-  // Scanning laser line
-  const sweepFrac = (Date.now() % 1600) / 1600;
-  const scanY = zy + sweepFrac * zH;
-  const grad = ctx.createLinearGradient(zx, scanY-8, zx, scanY+8);
-  grad.addColorStop(0, 'rgba(255,255,255,0)');
-  grad.addColorStop(0.5, 'rgba(255,255,255,0.45)');
-  grad.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(zx, scanY-8, zW, 16);
+  // Sweep line
+  const frac = (Date.now() % 1800) / 1800;
+  const sy = zy + frac * zH;
+  const g = ctx.createLinearGradient(0, sy-10, 0, sy+10);
+  g.addColorStop(0,   'rgba(255,255,255,0)');
+  g.addColorStop(0.5, 'rgba(255,255,255,0.4)');
+  g.addColorStop(1,   'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(zx, sy-10, zW, 20);
 
-  guideAnimFrame = requestAnimationFrame(drawGuide);
+  guideFrameId = requestAnimationFrame(drawGuide);
 }
 
-function startScan(deviceId){
-  if(guideAnimFrame){ cancelAnimationFrame(guideAnimFrame); }
-  if(scanIntervalId){ clearInterval(scanIntervalId); }
+// ── Camera init ────────────────────────────────────────────────────────
+// How scanning works: the video element streams live from the camera
+// continuously. Every 300ms we grab a snapshot of JUST the guide zone
+// pixels into a hidden canvas and run ZXing barcode detection on that
+// cropped image. No photos are saved — it's purely reading pixels
+// from the live video stream.
 
-  const video = document.getElementById('preview');
-  const constraints = { 
-    video: { 
-      deviceId: deviceId ? {exact: deviceId} : undefined, 
-      width: {ideal: 1280}, 
-      height: {ideal: 720} 
-    } 
-  };
+async function initCamera(){
+  // Wait for ZXing to load via the interval scan loop below
+  const sel = document.getElementById('camera-select');
 
-  navigator.mediaDevices.getUserMedia(constraints).then(stream=>{
-    video.srcObject = stream;
-    video.onloadeddata = ()=>{
-      video.play().catch(()=>{});
-      drawGuide();
+  try {
+    // Step 1: request any back camera first to get permission + enumerate
+    const tempStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } }
+    });
+    tempStream.getTracks().forEach(t => t.stop());
 
-      scanIntervalId = setInterval(()=>{
-        if(video.readyState < 2 || video.paused) return;
-        
-        const rect = video.getBoundingClientRect();
-        const vW = video.videoWidth, vH = video.videoHeight;
-        if(!vW || !vH) return;
-        
-        const { zx, zy, zW, zH } = getZone(rect.width, rect.height);
-        const sx = vW / rect.width, sy = vH / rect.height;
-        
-        const sw = Math.round(zW * sx);
-        const sh = Math.round(zH * sy);
-        
-        cropCanvas.width = sw;
-        cropCanvas.height = sh;
-        
-        try {
-          cropCtx.drawImage(video, Math.round(zx*sx), Math.round(zy*sy), sw, sh, 0, 0, sw, sh);
-          const imgData = cropCtx.getImageData(0, 0, sw, sh);
-          const lum = new ZXing.RGBLuminanceSource(imgData.data, sw, sh);
-          const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-          const result = zxReader.decodeBitmap(bmp);
-          handleScanResult(result);
-        } catch(e){
-          // Fallback to full frame decode if crop fails
-          zxReader.decode(video).then(result => handleScanResult(result)).catch(()=>{});
-        }
-      }, 300);
-    };
-  }).catch(err => console.error("Camera Error: ", err));
-}
+    // Step 2: enumerate all cameras now that we have permission
+    const allDevices = await navigator.mediaDevices.enumerateDevices();
+    const cameras = allDevices.filter(d => d.kind === 'videoinput');
 
-function handleScanResult(result) {
-  if (result) {
-    const val = result.getText();
-    if (val === lastScannedTag) return;
-    
-    lastScannedTag = val;
-    if (navigator.vibrate) navigator.vibrate(100);
-    setTimeout(() => { lastScannedTag = null; }, 2500);
-    
-    document.getElementById('f-tag').value = val;
-    populateFromRegistry(val, true);
-    triggerFlash();
+    sel.innerHTML = '';
+    cameras.forEach((d, i) => {
+      const o = document.createElement('option');
+      o.value = d.deviceId;
+      o.text = d.label || 'Camera ' + (i+1);
+      sel.appendChild(o);
+    });
+
+    // Step 3: pick back camera — prefer widest-angle (last listed on iOS = ultra-wide, use second-to-last or labeled 'back')
+    const backCams = cameras.filter(d =>
+      d.label.toLowerCase().includes('back') ||
+      d.label.toLowerCase().includes('rear') ||
+      d.label.toLowerCase().includes('environment')
+    );
+    // On iPhone: "Back Camera" is the standard lens — preferred for barcodes
+    const stdBack = backCams.find(d => d.label.toLowerCase().includes('back camera'));
+    const chosen = stdBack || backCams[0] || cameras[cameras.length - 1];
+    sel.value = chosen.deviceId;
+
+    openCamera(chosen.deviceId);
+
+    sel.onchange = () => openCamera(sel.value);
+
+  } catch(err) {
+    setStatus('Camera error: ' + err.message);
+    sel.innerHTML = '<option>Camera unavailable</option>';
   }
 }
 
-function triggerFlash(){
-  flashAlphaCur = 0.85;
-  const id = setInterval(()=>{ 
-    flashAlphaCur = Math.max(0, flashAlphaCur - 0.06); 
-    if(flashAlphaCur<=0) clearInterval(id); 
-  }, 30);
+function openCamera(deviceId){
+  // Stop any existing stream
+  if(activeStream){ activeStream.getTracks().forEach(t => t.stop()); activeStream = null; }
+  if(scanLoopId){ clearInterval(scanLoopId); scanLoopId = null; }
+  if(guideFrameId){ cancelAnimationFrame(guideFrameId); guideFrameId = null; }
+
+  const video = document.getElementById('preview');
+  setStatus('Opening camera…');
+
+  navigator.mediaDevices.getUserMedia({
+    video: {
+      deviceId: { exact: deviceId },
+      width:  { ideal: 1280 },
+      height: { ideal: 960 }
+    }
+  }).then(stream => {
+    activeStream = stream;
+    video.srcObject = stream;
+    video.onloadeddata = () => {
+      video.play();
+      setStatus('');
+      drawGuide();
+      startScanLoop(video);
+    };
+  }).catch(err => {
+    setStatus('Failed: ' + err.message);
+  });
 }
 
-// Registry & Logging Actions
+// ── Scan loop ──────────────────────────────────────────────────────────
+// Fires every 300ms. Crops the live video frame to the guide zone only,
+// then passes that pixel data to ZXing. Nothing is saved to disk.
+
+function startScanLoop(video){
+  // Create a fresh ZXing reader each time
+  let reader;
+  try { reader = new ZXing.BrowserMultiFormatReader(); } catch(e){ setStatus('ZXing not loaded'); return; }
+
+  scanLoopId = setInterval(() => {
+    if(video.readyState < 2 || video.videoWidth === 0) return;
+
+    // Map guide zone from display coords → actual video pixel coords
+    const rect = video.getBoundingClientRect();
+    if(!rect.width) return;
+    const { zx, zy, zW, zH } = getZone(rect.width, rect.height);
+    const scaleX = video.videoWidth  / rect.width;
+    const scaleY = video.videoHeight / rect.height;
+    const sx = Math.round(zx * scaleX);
+    const sy = Math.round(zy * scaleY);
+    const sw = Math.round(zW * scaleX);
+    const sh = Math.round(zH * scaleY);
+    if(sw < 20 || sh < 20) return;
+
+    cropCanvas.width  = sw;
+    cropCanvas.height = sh;
+    try {
+      cropCtx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
+    } catch(e){ return; }
+
+    let imgData;
+    try { imgData = cropCtx.getImageData(0, 0, sw, sh); } catch(e){ return; }
+
+    // Run ZXing decode on cropped pixels
+    try {
+      const lum = new ZXing.RGBLuminanceSource(imgData.data, sw, sh);
+      const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
+      const result = reader.decodeBitmap(bmp);
+      if(result){
+        const val = result.getText();
+        if(val === lastScannedTag) return; // debounce same tag
+        lastScannedTag = val;
+        setTimeout(() => { lastScannedTag = null; }, 2500);
+        onScanHit(val);
+      }
+    } catch(e){
+      // ZXing throws when no barcode found — normal, ignore
+    }
+  }, 300);
+}
+
+function onScanHit(val){
+  if(navigator.vibrate) navigator.vibrate(80);
+  flashAlpha = 0.9;
+  document.getElementById('f-tag').value = val;
+  populateFromRegistry(val, true);
+}
+
+// ── Registry lookup ────────────────────────────────────────────────────
 function populateFromRegistry(tag, fromScan){
   const key = tag.trim().toUpperCase();
   const asset = assets[key];
@@ -465,155 +471,208 @@ function populateFromRegistry(tag, fromScan){
   const ls = document.getElementById('last-scan');
 
   if(asset){
-    document.getElementById('f-toolname').value = asset.name||'';
-    document.getElementById('f-tooltype').value = asset.type||'';
-    document.getElementById('f-serial').value = asset.serial||'';
-    document.getElementById('tm-name').textContent = asset.name||key;
-    document.getElementById('tm-meta').textContent = [asset.type, asset.model, asset.serial?'S/N: '+asset.serial:''].filter(Boolean).join(' · ');
+    document.getElementById('f-toolname').value = asset.name || '';
+    document.getElementById('f-tooltype').value = asset.type || '';
+    document.getElementById('f-serial').value   = asset.serial || '';
+    document.getElementById('tm-name').textContent = asset.name || key;
+    document.getElementById('tm-meta').textContent = [asset.type, asset.model, asset.serial ? 'S/N: '+asset.serial : ''].filter(Boolean).join(' · ');
     card.classList.add('visible');
     if(fromScan){
-      ls.innerHTML = `<span style="color:#888;font-size:12px;">Scanned:</span> <span class="val">${escHtml(tag)}</span><span class="tool-detail">${escHtml(asset.name)}</span>`;
-      ls.classList.remove('flash'); void ls.offsetWidth; ls.classList.add('flash');
+      ls.innerHTML = `<span style="color:#888;font-size:12px;">Scanned:</span> <span class="val">${esc(tag)}</span><span class="tool-detail">${esc(asset.name)}${asset.type?' · '+esc(asset.type):''}${asset.serial?' · S/N: '+esc(asset.serial):''}</span>`;
     }
   } else {
     document.getElementById('f-toolname').value = '';
     document.getElementById('f-tooltype').value = '';
-    document.getElementById('f-serial').value = '';
+    document.getElementById('f-serial').value   = '';
     card.classList.remove('visible');
     if(fromScan){
-      ls.innerHTML = `<span style="color:#888;font-size:12px;">Scanned:</span> <span class="val">${escHtml(tag)}</span><span class="unregistered">Not in registry</span>`;
-      ls.classList.remove('flash'); void ls.offsetWidth; ls.classList.add('flash');
+      ls.innerHTML = `<span style="color:#888;font-size:12px;">Scanned:</span> <span class="val">${esc(tag)}</span><span class="unregistered">Not in registry — fill in details below</span>`;
     }
   }
 }
 
-function onTagInput(val){ if(val.trim()) populateFromRegistry(val, false); else { document.getElementById('tool-match-card').classList.remove('visible'); } }
+function onTagInput(val){
+  if(val.trim()) populateFromRegistry(val, false);
+  else document.getElementById('tool-match-card').classList.remove('visible');
+}
 
+// ── Log ────────────────────────────────────────────────────────────────
 function addEntry(){
-  const tag=document.getElementById('f-tag').value.trim();
+  const tag = document.getElementById('f-tag').value.trim();
   if(!tag){ alert('Asset tag is required.'); return; }
   log.unshift({
-    id:Date.now(), time:nowTime(),
-    date:document.getElementById('f-date').value||todayDate(),
-    tag, toolname:document.getElementById('f-toolname').value.trim(),
-    tooltype:document.getElementById('f-tooltype').value.trim(),
-    serial:document.getElementById('f-serial').value.trim(),
-    tech:document.getElementById('f-tech').value.trim(),
-    action:document.getElementById('f-action').value,
-    notes:document.getElementById('f-notes').value.trim()
+    id: Date.now(), time: nowTime(),
+    date: document.getElementById('f-date').value || todayDate(),
+    tag,
+    toolname: document.getElementById('f-toolname').value.trim(),
+    tooltype: document.getElementById('f-tooltype').value.trim(),
+    serial:   document.getElementById('f-serial').value.trim(),
+    tech:     document.getElementById('f-tech').value.trim(),
+    action:   document.getElementById('f-action').value,
+    notes:    document.getElementById('f-notes').value.trim()
   });
   renderLog();
-  ['f-tag','f-toolname','f-tooltype','f-serial','f-notes'].forEach(id=>document.getElementById(id).value='');
+  ['f-tag','f-toolname','f-tooltype','f-serial','f-notes'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('tool-match-card').classList.remove('visible');
-  document.getElementById('last-scan').innerHTML='<span>Waiting for scan…</span>';
+  document.getElementById('last-scan').innerHTML = '<span style="color:#aaa;">Waiting for scan…</span>';
+  lastScannedTag = null;
 }
 
 function renderLog(){
-  const tb=document.getElementById('log-body');
-  document.getElementById('entry-count').textContent=log.length+' entr'+(log.length===1?'y':'ies');
+  const tb = document.getElementById('log-body');
+  document.getElementById('entry-count').textContent = log.length + ' entr' + (log.length===1?'y':'ies');
   if(!log.length){ tb.innerHTML='<tr><td colspan="9" class="empty">No entries yet.</td></tr>'; return; }
-  tb.innerHTML=log.map(e=>{
-    const bc=e.action==='Check-In'?'badge-in':e.action==='Check-Out'?'badge-out':'badge-check';
+  tb.innerHTML = log.map(e => {
+    const bc = e.action==='Check-In'?'badge-in':e.action==='Check-Out'?'badge-out':'badge-check';
     return `<tr>
-      <td style="white-space:nowrap;color:#888;font-size:11px;">${escHtml(e.date)}<br>${escHtml(e.time)}</td>
-      <td><strong>${escHtml(e.tag)}</strong></td>
-      <td style="font-size:12px;">${escHtml(e.toolname||'—')}</td>
-      <td>${e.tooltype?`<span class="badge badge-type">${escHtml(e.tooltype)}</span>`:'<span style="color:#ccc;">—</span>'}</td>
-      <td style="font-size:11px;color:#888;">${escHtml(e.serial||'—')}</td>
-      <td style="font-size:12px;">${escHtml(e.tech||'—')}</td>
-      <td><span class="badge ${bc}">${escHtml(e.action)}</span></td>
-      <td style="color:#888;font-size:12px;">${escHtml(e.notes||'—')}</td>
+      <td style="white-space:nowrap;color:#888;font-size:11px;">${esc(e.date)}<br>${esc(e.time)}</td>
+      <td><strong>${esc(e.tag)}</strong></td>
+      <td style="font-size:12px;">${esc(e.toolname||'—')}</td>
+      <td>${e.tooltype?`<span class="badge badge-type">${esc(e.tooltype)}</span>`:'<span style="color:#ccc;">—</span>'}</td>
+      <td style="font-size:11px;color:#888;">${esc(e.serial||'—')}</td>
+      <td style="font-size:12px;">${esc(e.tech||'—')}</td>
+      <td><span class="badge ${bc}">${esc(e.action)}</span></td>
+      <td style="color:#888;font-size:12px;">${esc(e.notes||'—')}</td>
       <td><button class="small danger" onclick="removeEntry(${e.id})">✕</button></td>
     </tr>`;
   }).join('');
 }
 
 function removeEntry(id){ const i=log.findIndex(e=>e.id===id); if(i>-1){log.splice(i,1); renderLog();} }
-
 function clearForm(){
   ['f-tag','f-toolname','f-tooltype','f-serial','f-notes','f-tech'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('tool-match-card').classList.remove('visible');
-  document.getElementById('last-scan').innerHTML='<span>Waiting for scan…</span>';
+  document.getElementById('last-scan').innerHTML='<span style="color:#aaa;">Waiting for scan…</span>';
+  lastScannedTag = null;
 }
-
 function clearLog(){ if(log.length&&confirm('Clear all '+log.length+' entries?')){ log.length=0; renderLog(); } }
 
+// ── Asset Registry ─────────────────────────────────────────────────────
 function saveAsset(){
-  const tag=document.getElementById('r-tag').value.trim().toUpperCase();
-  const name=document.getElementById('r-name').value.trim();
+  const tag  = document.getElementById('r-tag').value.trim().toUpperCase();
+  const name = document.getElementById('r-name').value.trim();
   if(!tag||!name){ alert('Tag and tool name are required.'); return; }
-  const isEdit=!!assets[tag];
-  assets[tag]={tag,name,type:document.getElementById('r-type').value,model:document.getElementById('r-model').value.trim(),serial:document.getElementById('r-serial').value.trim(),price:document.getElementById('r-price').value,notes:document.getElementById('r-notes').value.trim()};
+  const isEdit = !!assets[tag];
+  assets[tag] = { tag, name,
+    type:   document.getElementById('r-type').value,
+    model:  document.getElementById('r-model').value.trim(),
+    serial: document.getElementById('r-serial').value.trim(),
+    price:  document.getElementById('r-price').value,
+    notes:  document.getElementById('r-notes').value.trim()
+  };
   renderAssets();
-  const msg=document.getElementById('r-msg');
-  msg.textContent=(isEdit?'Updated: ':'Saved: ')+tag+' — '+name;
-  msg.style.display='block';
-  setTimeout(()=>msg.style.display='none',3000);
+  const msg = document.getElementById('r-msg');
+  msg.textContent = (isEdit?'Updated: ':'Saved: ') + tag + ' — ' + name;
+  msg.style.display = 'block'; msg.style.color = '#3b6d11';
+  setTimeout(() => msg.style.display='none', 3000);
 }
 
 function renderAssets(){
-  const keys=Object.keys(assets).sort();
-  document.getElementById('asset-count').textContent=keys.length+' asset'+(keys.length===1?'':'s');
-  const tb=document.getElementById('asset-body');
+  const keys = Object.keys(assets).sort();
+  document.getElementById('asset-count').textContent = keys.length + ' asset' + (keys.length===1?'':'s');
+  const tb = document.getElementById('asset-body');
   if(!keys.length){ tb.innerHTML='<tr><td colspan="7" class="empty">No assets registered yet.</td></tr>'; document.getElementById('asset-total-val').textContent=''; return; }
-  const total=keys.reduce((s,k)=>s+(parseFloat(assets[k].price)||0),0);
-  document.getElementById('asset-total-val').textContent=total?'Total value: $'+total.toFixed(2):'';
-  tb.innerHTML=keys.map(k=>{
-    const a=assets[k];
+  const total = keys.reduce((s,k) => s + (parseFloat(assets[k].price)||0), 0);
+  document.getElementById('asset-total-val').textContent = total ? 'Total value: $'+total.toFixed(2) : '';
+  tb.innerHTML = keys.map(k => {
+    const a = assets[k];
     return `<tr>
-      <td><strong>${escHtml(a.tag)}</strong></td>
-      <td>${escHtml(a.name)}</td>
-      <td>${a.type?`<span class="type-pill">${escHtml(a.type)}</span>`:'—'}</td>
-      <td style="font-size:12px;color:#888;">${escHtml(a.model||'—')}</td>
-      <td style="font-size:12px;color:#888;">${escHtml(a.serial||'—')}</td>
+      <td><strong>${esc(a.tag)}</strong></td>
+      <td>${esc(a.name)}</td>
+      <td>${a.type?`<span class="type-pill">${esc(a.type)}</span>`:'—'}</td>
+      <td style="font-size:12px;color:#888;">${esc(a.model||'—')}</td>
+      <td style="font-size:12px;color:#888;">${esc(a.serial||'—')}</td>
       <td style="font-size:12px;">${fmt$(a.price)}</td>
-      <td style="display:flex;gap:4px;"><button class="small" onclick="editAsset('${escHtml(k)}')">Edit</button><button class="small danger" onclick="deleteAsset('${escHtml(k)}')">✕</button></td>
+      <td style="display:flex;gap:4px;">
+        <button class="small" onclick="editAsset('${esc(k)}')">Edit</button>
+        <button class="small danger" onclick="deleteAsset('${esc(k)}')">✕</button>
+      </td>
     </tr>`;
   }).join('');
 }
 
 function editAsset(tag){
-  const a=assets[tag]; if(!a) return;
-  document.getElementById('r-tag').value=a.tag;
-  document.getElementById('r-name').value=a.name;
-  document.getElementById('r-type').value=a.type||'';
-  document.getElementById('r-model').value=a.model||'';
-  document.getElementById('r-serial').value=a.serial||'';
-  document.getElementById('r-price').value=a.price||'';
-  document.getElementById('r-notes').value=a.notes||'';
+  const a = assets[tag]; if(!a) return;
+  ['tag','name','model','serial','notes'].forEach(f => document.getElementById('r-'+f).value = a[f]||'');
+  document.getElementById('r-type').value  = a.type  || '';
+  document.getElementById('r-price').value = a.price || '';
   document.querySelector('.tab[data-page="registry"]').click();
+  setTimeout(() => document.getElementById('r-tag').focus(), 100);
 }
 
-function deleteAsset(tag){ if(confirm('Remove '+tag+' from registry?')){ delete assets[tag]; renderAssets(); } }
-
+function deleteAsset(tag){ if(confirm('Remove '+tag+'?')){ delete assets[tag]; renderAssets(); } }
 function clearRegistryForm(){
   ['r-tag','r-name','r-model','r-serial','r-notes','r-price'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('r-type').value='';
 }
 
-// PDF Export Logic
+// ── PDF Export ─────────────────────────────────────────────────────────
 function exportPDF(){
   if(!log.length){ alert('Nothing to export.'); return; }
-  const {jsPDF}=window.jspdf;
-  const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'letter'});
-  const ds=document.getElementById('f-date').value||todayDate();
-  doc.setFont('helvetica','bold'); doc.text('WilliamSmith Fireplaces Tool Log',14,16);
-  doc.autoTable({startY:25,head:[['Time','Tag','Tool','Type','Serial','Tech','Action','Notes']],body:log.map(e=>[e.time,e.tag,e.toolname,e.tooltype,e.serial,e.tech,e.action,e.notes])});
-  doc.save('tool-log-'+ds+'.pdf');
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation:'landscape', unit:'mm', format:'letter' });
+  const ds = document.getElementById('f-date').value || todayDate();
+  doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.text('WilliamSmith Fireplaces', 14, 15);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(120);
+  doc.text('Tool Scan Log — '+ds, 14, 21);
+  doc.text('Exported: '+new Date().toLocaleString(), 255, 21, {align:'right'});
+  doc.setTextColor(0);
+  doc.autoTable({
+    startY: 26,
+    head: [['Date / Time','Tag','Tool name','Type','Serial','Tech','Action','Notes']],
+    body: [...log].reverse().map(e=>[e.date+' '+e.time, e.tag, e.toolname||'—', e.tooltype||'—', e.serial||'—', e.tech||'—', e.action, e.notes||'—']),
+    styles: { fontSize: 8, cellPadding: 2.5 },
+    headStyles: { fillColor: [26,26,24], textColor: 244, fontStyle:'bold' },
+    alternateRowStyles: { fillColor: [248,246,243] },
+    columnStyles: { 0:{cellWidth:30}, 1:{cellWidth:18,fontStyle:'bold'}, 2:{cellWidth:38}, 3:{cellWidth:24}, 4:{cellWidth:26}, 5:{cellWidth:26}, 6:{cellWidth:22}, 7:{cellWidth:'auto'} }
+  });
+  const pc = doc.internal.getNumberOfPages();
+  for(let i=1;i<=pc;i++){ doc.setPage(i); doc.setFontSize(7); doc.setTextColor(160); doc.text('Page '+i+' of '+pc+' — WilliamSmith Fireplaces Tool Scan Log', 14, doc.internal.pageSize.height-7); }
+  doc.save('tool-scan-log-'+ds+'.pdf');
 }
 
 function exportRegistryPDF(){
-  const keys=Object.keys(assets).sort();
+  const keys = Object.keys(assets).sort();
   if(!keys.length){ alert('No assets to export.'); return; }
-  const {jsPDF}=window.jspdf;
-  const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'letter'});
-  doc.setFont('helvetica','bold'); doc.text('WilliamSmith Fireplaces Asset Registry',14,16);
-  doc.autoTable({startY:25,head:[['Tag','Name','Type','Model','Serial','Value']],body:keys.map(k=>{const a=assets[k];return[a.tag,a.name,a.type,a.model,a.serial,fmt$(a.price)]})});
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation:'landscape', unit:'mm', format:'letter' });
+  doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.text('WilliamSmith Fireplaces', 14, 15);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(120);
+  doc.text('Asset Registry — '+keys.length+' tools', 14, 21);
+  doc.text('Exported: '+new Date().toLocaleString(), 255, 21, {align:'right'});
+  doc.setTextColor(0);
+  const total = keys.reduce((s,k) => s+(parseFloat(assets[k].price)||0), 0);
+  doc.autoTable({
+    startY: 26,
+    head: [['Tag','Tool name','Type','Brand / model','Serial','Value','Notes']],
+    body: keys.map(k => { const a=assets[k]; return [a.tag,a.name,a.type||'—',a.model||'—',a.serial||'—',fmt$(a.price),a.notes||'—']; }),
+    styles: { fontSize: 9, cellPadding: 3 },
+    headStyles: { fillColor: [26,26,24], textColor: 244, fontStyle:'bold' },
+    alternateRowStyles: { fillColor: [248,246,243] },
+    columnStyles: { 0:{cellWidth:20,fontStyle:'bold'}, 1:{cellWidth:48}, 2:{cellWidth:28}, 3:{cellWidth:40}, 4:{cellWidth:30}, 5:{cellWidth:20}, 6:{cellWidth:'auto'} },
+    foot: total ? [['','','','','','Total','$'+total.toFixed(2)]] : undefined,
+    footStyles: { fillColor: [26,26,24], textColor: 244, fontStyle:'bold' }
+  });
+  const pc = doc.internal.getNumberOfPages();
+  for(let i=1;i<=pc;i++){ doc.setPage(i); doc.setFontSize(7); doc.setTextColor(160); doc.text('Page '+i+' of '+pc+' — WilliamSmith Fireplaces Asset Registry', 14, doc.internal.pageSize.height-7); }
   doc.save('asset-registry-'+todayDate()+'.pdf');
 }
 
-window.addEventListener('load', initCamera);
+// ── Boot ───────────────────────────────────────────────────────────────
+// ZXing loads async via unpkg — poll until available then init camera
+// Note: ZXing is loaded inline below to avoid unpkg latency issues on mobile
+
+window.addEventListener('load', () => {
+  const waitForZXing = setInterval(() => {
+    if(typeof ZXing !== 'undefined'){
+      clearInterval(waitForZXing);
+      initCamera();
+    }
+  }, 100);
+});
 </script>
 
+<!-- ZXing loaded last so DOM is ready first -->
+<script src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
 </body>
 </html>
