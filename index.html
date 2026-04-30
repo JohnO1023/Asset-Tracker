@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -75,6 +76,11 @@ button.small { padding: 0.3rem 0.65rem; font-size: 12px; }
 .cam-controls { display: flex; gap: 6px; align-items: center; margin-bottom: 4px; }
 #torch-btn { padding: 0.3rem 0.8rem; font-size: 12px; border-radius: 5px; border: 1px solid #d0c9c0; background: #fff; cursor: pointer; display: none; white-space: nowrap; }
 #torch-btn.on { background: #faeeda; border-color: #854f0b; color: #854f0b; }
+.cam-start-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: #111; cursor: pointer; z-index: 10; border-radius: 6px; }
+.cam-start-overlay .start-icon { width: 52px; height: 52px; border-radius: 50%; background: rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; }
+.cam-start-overlay .start-icon svg { width: 26px; height: 26px; }
+.cam-start-overlay p { color: #ccc; font-size: 13px; margin: 0; }
+.cam-start-overlay.hidden { display: none; }
 </style>
 </head>
 <body>
@@ -103,6 +109,12 @@ button.small { padding: 0.3rem 0.65rem; font-size: 12px; }
         <div class="cam-wrap">
           <video id="preview" autoplay muted playsinline webkit-playsinline></video>
           <canvas id="guide-canvas"></canvas>
+          <div class="cam-start-overlay" id="cam-overlay" onclick="userStartCamera()">
+            <div class="start-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            </div>
+            <p>Tap to start camera</p>
+          </div>
         </div>
         <div class="guide-hint">Align ONE barcode inside the guide zone</div>
         <div id="cam-status"></div>
@@ -110,51 +122,54 @@ button.small { padding: 0.3rem 0.65rem; font-size: 12px; }
       </div>
     </div>
 
-    <div class="panel">
-      <div class="panel-head">Log entry</div>
-      <div class="panel-body">
-        <div class="field-row">
-          <label>Asset tag (auto-filled on scan)</label>
-          <input type="text" id="f-tag" placeholder="BB-001" oninput="onTagInput(this.value)" />
-        </div>
-        <div class="tool-match-card" id="tool-match-card">
-          <div class="tm-name" id="tm-name"></div>
-          <div class="tm-meta" id="tm-meta"></div>
-        </div>
-        <div class="field-row">
-          <label>Tool name</label>
-          <input type="text" id="f-toolname" placeholder="Auto-filled or enter manually" />
-        </div>
-        <div class="field-row">
-          <label>Tool type / category</label>
-          <input type="text" id="f-tooltype" placeholder="Auto-filled or enter manually" />
-        </div>
-        <div class="field-row">
-          <label>Serial number</label>
-          <input type="text" id="f-serial" placeholder="Auto-filled or enter manually" />
-        </div>
-        <div class="field-row">
-          <label>Tech / assigned to</label>
-          <input type="text" id="f-tech" placeholder="e.g. Mike S." />
-        </div>
-        <div class="field-row">
-          <label>Action</label>
-          <select id="f-action">
-            <option value="Check-Out">Check-Out</option>
-            <option value="Check-In">Check-In</option>
-            <option value="Spot Check">Spot Check</option>
-          </select>
-        </div>
-        <div class="field-row">
-          <label>Notes (optional)</label>
-          <input type="text" id="f-notes" placeholder="Job #, condition, etc." />
-        </div>
-        <div class="controls">
-          <button class="primary" onclick="addEntry()">+ Add to log</button>
-          <button onclick="clearForm()">Clear</button>
-        </div>
-      </div>
+```
+<div class="panel">
+  <div class="panel-head">Log entry</div>
+  <div class="panel-body">
+    <div class="field-row">
+      <label>Asset tag (auto-filled on scan)</label>
+      <input type="text" id="f-tag" placeholder="BB-001" oninput="onTagInput(this.value)" />
     </div>
+    <div class="tool-match-card" id="tool-match-card">
+      <div class="tm-name" id="tm-name"></div>
+      <div class="tm-meta" id="tm-meta"></div>
+    </div>
+    <div class="field-row">
+      <label>Tool name</label>
+      <input type="text" id="f-toolname" placeholder="Auto-filled or enter manually" />
+    </div>
+    <div class="field-row">
+      <label>Tool type / category</label>
+      <input type="text" id="f-tooltype" placeholder="Auto-filled or enter manually" />
+    </div>
+    <div class="field-row">
+      <label>Serial number</label>
+      <input type="text" id="f-serial" placeholder="Auto-filled or enter manually" />
+    </div>
+    <div class="field-row">
+      <label>Tech / assigned to</label>
+      <input type="text" id="f-tech" placeholder="e.g. Mike S." />
+    </div>
+    <div class="field-row">
+      <label>Action</label>
+      <select id="f-action">
+        <option value="Check-Out">Check-Out</option>
+        <option value="Check-In">Check-In</option>
+        <option value="Spot Check">Spot Check</option>
+      </select>
+    </div>
+    <div class="field-row">
+      <label>Notes (optional)</label>
+      <input type="text" id="f-notes" placeholder="Job #, condition, etc." />
+    </div>
+    <div class="controls">
+      <button class="primary" onclick="addEntry()">+ Add to log</button>
+      <button onclick="clearForm()">Clear</button>
+    </div>
+  </div>
+</div>
+```
+
   </div>
 
   <div class="panel" style="display:flex;flex-direction:column;">
@@ -243,7 +258,6 @@ const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replac
 const fmt$ = v => (v && parseFloat(v)) ? '$'+parseFloat(v).toFixed(2) : '—';
 const setStatus = msg => { document.getElementById('cam-status').textContent = msg; };
 
-document.getElementById('f-date').value = todayDate();
 setInterval(() => { document.getElementById('clock').textContent = nowTime(); }, 1000);
 
 // ── Tab switching ──────────────────────────────────────────────────────
@@ -333,53 +347,92 @@ function drawGuide(){
 }
 
 // ── Camera init ────────────────────────────────────────────────────────
-// How scanning works: the video element streams live from the camera
-// continuously. Every 300ms we grab a snapshot of JUST the guide zone
-// pixels into a hidden canvas and run ZXing barcode detection on that
-// cropped image. No photos are saved — it's purely reading pixels
-// from the live video stream.
+// iOS Safari requires a user gesture (tap) before getUserMedia will work.
+// We show a "Tap to start" overlay. On tap, we request environment-facing
+// camera directly using facingMode — no enumerate-first dance needed,
+// which avoids the blank-label problem on GitHub Pages / Safari.
+
+function userStartCamera(){
+  const overlay = document.getElementById('cam-overlay');
+  overlay.classList.add('hidden');
+  setStatus('Requesting camera…');
+  initCamera();
+}
 
 async function initCamera(){
-  // Wait for ZXing to load via the interval scan loop below
   const sel = document.getElementById('camera-select');
+  const video = document.getElementById('preview');
 
   try {
-    // Step 1: request any back camera first to get permission + enumerate
-    const tempStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' } }
-    });
-    tempStream.getTracks().forEach(t => t.stop());
-
-    // Step 2: enumerate all cameras now that we have permission
-    const allDevices = await navigator.mediaDevices.enumerateDevices();
-    const cameras = allDevices.filter(d => d.kind === 'videoinput');
-
-    sel.innerHTML = '';
-    cameras.forEach((d, i) => {
-      const o = document.createElement('option');
-      o.value = d.deviceId;
-      o.text = d.label || 'Camera ' + (i+1);
-      sel.appendChild(o);
+    // Request back camera directly — works on iOS Safari without pre-enumeration
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { exact: 'environment' },
+        width:  { ideal: 1920 },
+        height: { ideal: 1080 }
+      }
     });
 
-    // Step 3: pick back camera — prefer widest-angle (last listed on iOS = ultra-wide, use second-to-last or labeled 'back')
-    const backCams = cameras.filter(d =>
-      d.label.toLowerCase().includes('back') ||
-      d.label.toLowerCase().includes('rear') ||
-      d.label.toLowerCase().includes('environment')
-    );
-    // On iPhone: "Back Camera" is the standard lens — preferred for barcodes
-    const stdBack = backCams.find(d => d.label.toLowerCase().includes('back camera'));
-    const chosen = stdBack || backCams[0] || cameras[cameras.length - 1];
-    sel.value = chosen.deviceId;
+    activeStream = stream;
+    video.srcObject = stream;
 
-    openCamera(chosen.deviceId);
+    // Now enumerate to populate the selector (labels available post-permission)
+    try {
+      const all = await navigator.mediaDevices.enumerateDevices();
+      const cams = all.filter(d => d.kind === 'videoinput');
+      sel.innerHTML = '';
+      cams.forEach((d, i) => {
+        const o = document.createElement('option');
+        o.value = d.deviceId;
+        o.text  = d.label || 'Camera ' + (i+1);
+        // Mark whichever device is currently active
+        const activeTrack = stream.getVideoTracks()[0];
+        if(activeTrack && d.label === activeTrack.label) o.selected = true;
+        sel.appendChild(o);
+      });
+    } catch(e){ sel.innerHTML = '<option>Back camera</option>'; }
 
     sel.onchange = () => openCamera(sel.value);
 
+    video.onloadeddata = () => {
+      video.play().catch(()=>{});
+      setStatus('');
+      const track = stream.getVideoTracks()[0];
+      const caps = track.getCapabilities ? track.getCapabilities() : {};
+      if(caps.torch) document.getElementById('torch-btn').style.display = 'block';
+      drawGuide();
+      startScanLoop(video);
+    };
+
   } catch(err) {
-    setStatus('Camera error: ' + err.message);
-    sel.innerHTML = '<option>Camera unavailable</option>';
+    // exact: 'environment' failed — try ideal (front-camera fallback)
+    if(err.name === 'OverconstrainedError' || err.name === 'NotFoundError'){
+      fallbackCamera();
+    } else {
+      setStatus('Camera blocked: ' + err.message);
+      document.getElementById('cam-overlay').classList.remove('hidden');
+    }
+  }
+}
+
+async function fallbackCamera(){
+  const video = document.getElementById('preview');
+  setStatus('Trying any camera…');
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width:{ideal:1280}, height:{ideal:720} }
+    });
+    activeStream = stream;
+    video.srcObject = stream;
+    video.onloadeddata = () => {
+      video.play().catch(()=>{});
+      setStatus('');
+      drawGuide();
+      startScanLoop(video);
+    };
+  } catch(e){
+    setStatus('No camera available');
+    document.getElementById('cam-overlay').classList.remove('hidden');
   }
 }
 
@@ -736,20 +789,16 @@ function exportRegistryPDF(){
 }
 
 // ── Boot ───────────────────────────────────────────────────────────────
-// ZXing loads async via unpkg — poll until available then init camera
-// Note: ZXing is loaded inline below to avoid unpkg latency issues on mobile
-
+// Camera starts on user tap (iOS Safari requires a gesture).
+// Just set the date field on load.
 window.addEventListener('load', () => {
-  const waitForZXing = setInterval(() => {
-    if(typeof ZXing !== 'undefined'){
-      clearInterval(waitForZXing);
-      initCamera();
-    }
-  }, 100);
+  document.getElementById('f-date').value = todayDate();
 });
 </script>
 
 <!-- ZXing loaded last so DOM is ready first -->
-<script src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
+
 </body>
 </html>
