@@ -437,13 +437,21 @@ transition: border-color 0.15s; -webkit-appearance: none;
 <!-- CAMERA -->
 
 <div id="camera-overlay">
-  <div style="position:relative;flex:1;">
-    <video id="camera-video" autoplay muted playsinline webkit-playsinline></video>
-    <div class="scan-frame"><div class="scan-line"></div></div>
+  <div style="position:relative;flex:1;background:#000;overflow:hidden;">
+    <video id="camera-video" autoplay muted playsinline webkit-playsinline style="width:100%;height:100%;object-fit:cover;"></video>
+    <canvas id="camera-canvas" style="display:none;"></canvas>
+    <!-- Guide box: wide rectangle suits 1D barcodes -->
+    <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;">
+      <div style="position:absolute;inset:0;background:rgba(0,0,0,0.45);"></div>
+      <div id="scan-box" style="position:relative;width:78%;height:22%;border:2px solid var(--accent);border-radius:6px;box-shadow:0 0 0 9999px rgba(0,0,0,0.45);">
+        <div style="position:absolute;top:0;left:0;right:0;height:2px;background:var(--accent);opacity:0.8;animation:scanLine 1.6s linear infinite;"></div>
+      </div>
+    </div>
+    <div id="cam-feedback" style="position:absolute;bottom:12px;left:0;right:0;text-align:center;font-size:12px;color:rgba(255,255,255,0.6);">Center barcode in the box then tap Capture</div>
   </div>
-  <div class="camera-bar">
+  <div class="camera-bar" style="display:flex;gap:10px;padding:14px 16px;background:#000;align-items:center;">
     <button class="btn btn-ghost" onclick="closeCamera()" style="flex:1;">Cancel</button>
-    <span style="font-size:11px;color:var(--text3);flex:2;text-align:center;">Hold steady · barcode fills the box</span>
+    <button class="btn btn-primary" id="shutter-btn" onclick="captureAndDecode()" style="flex:2;font-size:15px;">📷 Capture</button>
   </div>
 </div>
 
@@ -831,25 +839,86 @@ function exportRegistryPDF(){
 function clearAll(){ if(!confirm('Delete ALL assets and logs?')) return; localStorage.removeItem('ws_assets'); localStorage.removeItem('ws_logs'); renderLog(); renderAssets(); renderRecent(); updateStats(); }
 
 // ── CAMERA ─────────────────────────────────────────────────────────────
+// iOS Safari doesn't allow continuous frame decode via ZXing.
+// Instead: open live preview → user taps Capture → grab one frame →
+// decode that still image. Much more reliable on all devices.
+
 async function openCamera(){
   const overlay = document.getElementById('camera-overlay');
   overlay.classList.add('open');
+  setFeedback('Center barcode in the box then tap Capture');
+
   try {
-    cameraStream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment', width:{ideal:1280}, height:{ideal:720} } });
-    const video = document.getElementById('camera-video');
-    video.srcObject = cameraStream;
-    if(typeof ZXing==='undefined') await loadScript('https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js');
-    zxingReader = new ZXing.BrowserMultiFormatReader();
-    zxingReader.decodeFromVideoElement(video, (result, err)=>{
-      if(result){ closeCamera(); handleScan(result.getText()); }
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width:{ideal:1920}, height:{ideal:1080} }
     });
-  } catch(e){ alert('Camera not available: '+e.message); closeCamera(); }
+    document.getElementById('camera-video').srcObject = cameraStream;
+  } catch(e){
+    // Fallback: try without facingMode constraint
+    try {
+      cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      document.getElementById('camera-video').srcObject = cameraStream;
+    } catch(e2){
+      alert('Camera not available: '+e2.message);
+      closeCamera();
+    }
+  }
+}
+
+async function captureAndDecode(){
+  const video = document.getElementById('camera-video');
+  const canvas = document.getElementById('camera-canvas');
+  const btn = document.getElementById('shutter-btn');
+
+  if(!video.videoWidth){ setFeedback('Camera not ready — wait a moment'); return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Decoding…';
+
+  // Draw current video frame to canvas
+  canvas.width  = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0);
+
+  // Load ZXing if needed
+  if(typeof ZXing === 'undefined'){
+    try { await loadScript('https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js'); }
+    catch(e){ setFeedback('Could not load decoder — check connection'); btn.disabled=false; btn.textContent='📷 Capture'; return; }
+  }
+
+  // Decode from canvas image data
+  try {
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const lum = new ZXing.RGBLuminanceSource(imgData.data, canvas.width, canvas.height);
+    const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
+    const reader = new ZXing.BrowserMultiFormatReader();
+    const result = reader.decodeBitmap(bmp);
+    if(result){
+      closeCamera();
+      handleScan(result.getText());
+      return;
+    }
+  } catch(e){
+    // NotFoundException is normal when no barcode found
+  }
+
+  // Nothing found — give feedback, re-enable
+  setFeedback('No barcode found — reposition and try again');
+  btn.disabled = false;
+  btn.textContent = '📷 Capture';
+}
+
+function setFeedback(msg){
+  const el = document.getElementById('cam-feedback');
+  if(el) el.textContent = msg;
 }
 
 function closeCamera(){
   document.getElementById('camera-overlay').classList.remove('open');
-  if(zxingReader){ try{ zxingReader.reset(); }catch(e){} zxingReader=null; }
   if(cameraStream){ cameraStream.getTracks().forEach(t=>t.stop()); cameraStream=null; }
+  const btn = document.getElementById('shutter-btn');
+  if(btn){ btn.disabled=false; btn.textContent='📷 Capture'; }
   focusScan();
 }
 
