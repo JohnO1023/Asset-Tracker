@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0f0f0f">
+<title>WilliamSmith Fireplaces — Tool Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<style>
+:root {
+  --bg: #0f0f0f;
+  --surface: #1a1a1a;
+  --surface2: #242424;
+  --border: #2e2e2e;
+  --border2: #3a3a3a;
+  --text: #e8e8e4;
+  --text2: #888880;
+  --text3: #555550;
+  --accent: #c8813a;
+  --accent-dim: rgba(200,129,58,0.14);
+  --accent-dim2: rgba(200,129,58,0.07);
+  --red: #ff4d4d;
+  --red-dim: rgba(255,77,77,0.12);
+  --amber: #ffb84d;
+  --amber-dim: rgba(255,184,77,0.12);
+  --blue: #4d9fff;
+  --blue-dim: rgba(77,159,255,0.12);
+  --green: #4dff91;
+  --green-dim: rgba(77,255,145,0.12);
+  --radius: 6px;
+  --radius-lg: 10px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 15px; }
+body { font-family: 'IBM Plex Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; -webkit-font-smoothing: antialiased; }
+
+.app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+.topbar { display: flex; align-items: center; gap: 10px; padding: 0 16px; height: 52px; border-bottom: 1px solid var(–border); background: var(–bg); flex-shrink: 0; z-index: 10; }
+.topbar-logo { display: flex; align-items: center; gap: 8px; }
+.topbar-title { font-family: ‘IBM Plex Mono’, monospace; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: var(–text); }
+.topbar-sub { font-size: 10px; color: var(–text3); letter-spacing: 0.04em; }
+.topbar-clock { font-family: ‘IBM Plex Mono’, monospace; font-size: 11px; color: var(–text3); margin-left: auto; }
+
+.tabs { display: flex; border-bottom: 1px solid var(–border); background: var(–bg); flex-shrink: 0; }
+.tab { flex: 1; padding: 10px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; text-align: center; color: var(–text3); cursor: pointer; border: none; background: none; border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s; }
+.tab.active { color: var(–accent); border-bottom-color: var(–accent); }
+
+.content { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.page { display: none; padding: 14px; }
+.page.active { display: block; }
+
+.card { background: var(–surface); border: 1px solid var(–border); border-radius: var(–radius-lg); overflow: hidden; margin-bottom: 12px; }
+.card-head { padding: 9px 14px; border-bottom: 1px solid var(–border); font-size: 10px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(–text3); display: flex; align-items: center; gap: 8px; }
+.card-body { padding: 14px; }
+
+/* Scan input */
+.scan-input {
+width: 100%; font-family: ‘IBM Plex Mono’, monospace; font-size: 20px; font-weight: 600;
+padding: 14px 16px; background: var(–surface2); border: 2px solid var(–border2);
+border-radius: var(–radius); color: var(–text); letter-spacing: 0.06em; outline: none;
+transition: border-color 0.15s; -webkit-appearance: none;
+}
+.scan-input:focus { border-color: var(–accent); box-shadow: 0 0 0 3px var(–accent-dim); }
+.scan-input::placeholder { color: var(–text3); font-size: 14px; font-weight: 400; letter-spacing: 0; }
+.scan-input.flash-ok  { border-color: var(–green); box-shadow: 0 0 0 3px var(–green-dim); }
+.scan-input.flash-err { border-color: var(–red);   box-shadow: 0 0 0 3px var(–red-dim);   }
+.scan-hint { font-size: 11px; color: var(–text3); margin-top: 6px; }
+
+.scan-row { display: flex; gap: 8px; align-items: center; }
+.scan-row .scan-input { flex: 1; font-size: 16px; padding: 12px 14px; }
+
+/* Pills */
+.pill { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 100px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; font-family: ‘IBM Plex Mono’, monospace; }
+.pill-good    { background: var(–green-dim); color: var(–green); }
+.pill-fair    { background: var(–amber-dim); color: var(–amber); }
+.pill-poor    { background: var(–red-dim);   color: var(–red); }
+.pill-new     { background: var(–blue-dim);  color: var(–blue); }
+.pill-lost    { background: rgba(255,77,77,0.2); color: var(–red); }
+.pill-replace { background: rgba(255,100,50,0.15); color: #ff7850; }
+.pill-other   { background: var(–surface2); color: var(–text2); }
+
+/* Forms */
+.field { margin-bottom: 12px; }
+.field label { display: block; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(–text3); margin-bottom: 5px; }
+.field input, .field select, .field textarea { width: 100%; padding: 9px 12px; background: var(–surface2); border: 1px solid var(–border2); border-radius: var(–radius); color: var(–text); font-family: ‘IBM Plex Sans’, sans-serif; font-size: 14px; outline: none; transition: border-color 0.15s; -webkit-appearance: none; }
+.field input:focus, .field select:focus, .field textarea:focus { border-color: var(–accent); }
+.field select option { background: #222; }
+.field textarea { resize: vertical; min-height: 60px; line-height: 1.5; }
+.inline-row { display: flex; gap: 8px; }
+.inline-row .field { flex: 1; }
+
+/* Mode toggle */
+.mode-toggle { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 14px; }
+.mode-btn { padding: 9px 6px; border-radius: var(–radius); border: 1px solid var(–border2); background: var(–surface2); color: var(–text2); font-family: ‘IBM Plex Sans’, sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; cursor: pointer; text-align: center; transition: all 0.15s; }
+.mode-btn.active { background: var(–accent-dim); border-color: var(–accent); color: var(–accent); }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 16px; border-radius: var(–radius); font-family: ‘IBM Plex Sans’, sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid transparent; transition: all 0.15s; white-space: nowrap; -webkit-tap-highlight-color: transparent; }
+.btn-primary { background: var(–accent); color: #fff; border-color: var(–accent); }
+.btn-primary:active { transform: scale(0.97); opacity: 0.9; }
+.btn-ghost { background: transparent; color: var(–text2); border-color: var(–border2); }
+.btn-ghost:hover { background: var(–surface2); color: var(–text); }
+.btn-danger { background: transparent; color: var(–red); border-color: rgba(255,77,77,0.3); }
+.btn-danger:hover { background: var(–red-dim); }
+.btn-full { width: 100%; }
+
+/* Stats */
+.stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+.stat-box { background: var(–surface); border: 1px solid var(–border); border-radius: var(–radius); padding: 10px 6px; text-align: center; }
+.stat-num { font-family: ‘IBM Plex Mono’, monospace; font-size: 22px; font-weight: 600; color: var(–accent); line-height: 1; }
+.stat-label { font-size: 9px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(–text3); margin-top: 4px; }
+
+/* Log table */
+.log-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.log-table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 600px; }
+.log-table th { text-align: left; padding: 8px 10px; font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(–text3); border-bottom: 1px solid var(–border); white-space: nowrap; }
+.log-table td { padding: 9px 10px; border-bottom: 1px solid var(–border); vertical-align: middle; }
+.log-table tr:last-child td { border-bottom: none; }
+.log-table tbody tr:hover td { background: var(–surface2); }
+.mono { font-family: ‘IBM Plex Mono’, monospace; font-size: 11px; }
+.del-btn { background: none; border: none; color: var(–text3); cursor: pointer; padding: 4px 6px; border-radius: 4px; font-size: 13px; line-height: 1; transition: all 0.1s; }
+.del-btn:hover { color: var(–red); background: var(–red-dim); }
+.empty-state { padding: 32px 16px; text-align: center; color: var(–text3); font-size: 13px; }
+
+/* Asset list */
+.asset-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(–border); cursor: pointer; transition: background 0.1s; }
+.asset-row:last-child { border-bottom: none; }
+.asset-row:hover { background: var(–surface2); }
+.asset-code { font-family: ‘IBM Plex Mono’, monospace; font-size: 13px; font-weight: 600; color: var(–accent); min-width: 72px; }
+.asset-info { flex: 1; }
+.asset-name { font-size: 13px; font-weight: 500; }
+.asset-meta { font-size: 11px; color: var(–text3); margin-top: 2px; }
+.asset-count { font-family: ‘IBM Plex Mono’, monospace; font-size: 11px; color: var(–text3); background: var(–surface2); border: 1px solid var(–border); border-radius: 100px; padding: 2px 8px; }
+
+/* Overlay / sheet */
+.overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.72); z-index: 100; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+.overlay.open { display: flex; align-items: flex-end; }
+@media (min-width: 600px) { .overlay.open { align-items: center; justify-content: center; } }
+.sheet { background: var(–surface); border: 1px solid var(–border2); border-radius: 16px 16px 0 0; width: 100%; max-height: 92vh; overflow-y: auto; padding: 20px 16px 32px; animation: slideUp 0.2s ease; }
+@media (min-width: 600px) { .sheet { border-radius: var(–radius-lg); max-width: 500px; max-height: 88vh; } }
+@keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.sheet-handle { width: 36px; height: 4px; background: var(–border2); border-radius: 2px; margin: 0 auto 20px; }
+.sheet-title { font-family: ‘IBM Plex Mono’, monospace; font-size: 13px; font-weight: 600; letter-spacing: 0.05em; margin-bottom: 16px; color: var(–accent); }
+.sheet-actions { display: flex; gap: 8px; margin-top: 16px; }
+
+/* Detail */
+.detail-block { background: var(–surface2); border: 1px solid var(–border); border-radius: var(–radius); padding: 12px 14px; margin-bottom: 12px; }
+.detail-row { display: flex; justify-content: space-between; align-items: baseline; padding: 5px 0; border-bottom: 1px solid var(–border); font-size: 13px; }
+.detail-row:last-child { border-bottom: none; }
+.detail-key { color: var(–text3); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.detail-val { font-family: ‘IBM Plex Mono’, monospace; font-size: 12px; }
+
+/* Toolbar */
+.toolbar { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid var(–border); background: var(–bg); align-items: center; flex-wrap: wrap; }
+.toolbar-count { font-size: 11px; color: var(–text3); font-family: ‘IBM Plex Mono’, monospace; margin-right: auto; }
+
+/* Camera overlay */
+#camera-overlay { display: none; position: fixed; inset: 0; background: #000; z-index: 200; flex-direction: column; }
+#camera-overlay.open { display: flex; }
+#camera-video { width: 100%; flex: 1; object-fit: cover; }
+.camera-bar { background: #000; padding: 16px; display: flex; gap: 10px; align-items: center; }
+.scan-frame { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -60%); width: min(80vw, 280px); height: min(30vw, 120px); border: 2px solid var(–accent); border-radius: 8px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.55); }
+.scan-line { position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(–accent); animation: scanLine 1.6s linear infinite; opacity: 0.85; }
+@keyframes scanLine { 0% { top: 0; } 100% { top: 100%; } }
+
+/* Notice */
+.notice { background: var(–accent-dim2); border: 1px solid rgba(200,129,58,0.2); border-radius: var(–radius); padding: 10px 12px; font-size: 12px; color: var(–text2); line-height: 1.5; margin-bottom: 12px; }
+.notice strong { color: var(–accent); }
+
+.divider { height: 1px; background: var(–border); margin: 12px 0; }
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(–border2); border-radius: 2px; }
+
+@media (min-width: 700px) { .page { max-width: 960px; margin: 0 auto; } }
+</style>
+
+</head>
+<body>
+<div class="app">
+
+  <div class="topbar">
+    <div class="topbar-logo">
+      <svg width="14" height="16" viewBox="0 0 14 16" fill="none">
+        <rect x="0" y="2" width="2" height="12" rx="0.5" fill="#c8813a"/>
+        <rect x="4" y="2" width="1" height="12" rx="0.5" fill="#c8813a"/>
+        <rect x="6.5" y="2" width="2" height="12" rx="0.5" fill="#c8813a"/>
+        <rect x="10" y="2" width="1.5" height="12" rx="0.5" fill="#c8813a"/>
+        <rect x="12.5" y="2" width="1" height="12" rx="0.5" fill="#c8813a"/>
+      </svg>
+      <div>
+        <div class="topbar-title">WILLIAMSMITH FIREPLACES</div>
+        <div class="topbar-sub">TOOL TRACKER</div>
+      </div>
+    </div>
+    <span class="topbar-clock" id="clock">--:--:--</span>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('scan')">Scan</button>
+    <button class="tab" onclick="switchTab('log')">Log</button>
+    <button class="tab" onclick="switchTab('assets')">Assets</button>
+    <button class="tab" onclick="switchTab('export')">Export</button>
+  </div>
+
+  <div class="content">
+
+```
+<!-- SCAN TAB -->
+<div class="page active" id="page-scan">
+  <div class="mode-toggle">
+    <button class="mode-btn active" id="mode-checkout"  onclick="setMode('checkout')">Check-Out</button>
+    <button class="mode-btn"        id="mode-checkin"   onclick="setMode('checkin')">Check-In</button>
+    <button class="mode-btn"        id="mode-spotcheck" onclick="setMode('spotcheck')">Spot Check</button>
+  </div>
+
+  <div id="tech-selector">
+    <div class="field">
+      <label>Tech / Assigned To</label>
+      <select id="batch-tech">
+        <option>— select —</option>
+        <option>Tech 1</option><option>Tech 2</option><option>Tech 3</option>
+        <option>Installer 1</option><option>Installer 2</option><option>Installer 3</option>
+        <option>PM 1</option><option>PM 2</option><option>PM 3</option>
+        <option>Office / Shop</option><option>Other</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">Scan Barcode</div>
+    <div class="card-body">
+      <div class="notice">
+        <strong>Scanner ready.</strong> Focus the field and scan with your Bluetooth or USB HID scanner. Tap the camera icon to use the phone camera instead.
+      </div>
+      <div class="scan-row">
+        <input type="text" class="scan-input" id="scan-input"
+          placeholder="BB-001 or scan here"
+          autocomplete="off" autocorrect="off" spellcheck="false" inputmode="text" />
+        <button class="btn btn-ghost" onclick="openCamera()" title="Camera">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="5" width="22" height="15" rx="2"/><circle cx="12" cy="12" r="4"/><path d="M9 5l1.5-2h3L15 5"/></svg>
+        </button>
+      </div>
+      <div class="scan-hint" id="scan-hint">Field auto-submits after scan · Enter to submit manually</div>
+    </div>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat-box"><div class="stat-num" id="s-total">0</div><div class="stat-label">Total</div></div>
+    <div class="stat-box"><div class="stat-num" id="s-today">0</div><div class="stat-label">Today</div></div>
+    <div class="stat-box"><div class="stat-num" id="s-assets">0</div><div class="stat-label">Assets</div></div>
+    <div class="stat-box"><div class="stat-num" id="s-issues">0</div><div class="stat-label">Issues</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">Recent</div>
+    <div id="recent-list"><div class="empty-state">No scans yet</div></div>
+  </div>
+</div>
+
+<!-- LOG TAB -->
+<div class="page" id="page-log">
+  <div class="stats-row">
+    <div class="stat-box"><div class="stat-num" id="l-total">0</div><div class="stat-label">Total</div></div>
+    <div class="stat-box"><div class="stat-num" id="l-today">0</div><div class="stat-label">Today</div></div>
+    <div class="stat-box"><div class="stat-num" id="l-assets">0</div><div class="stat-label">Assets</div></div>
+    <div class="stat-box"><div class="stat-num" id="l-issues">0</div><div class="stat-label">Issues</div></div>
+  </div>
+  <div class="card" style="padding:0;overflow:visible;">
+    <div class="log-scroll">
+      <table class="log-table">
+        <thead><tr><th>Time</th><th>Tag</th><th>Tool</th><th>Type</th><th>Action</th><th>Tech</th><th>Cond.</th><th>Notes</th><th></th></tr></thead>
+        <tbody id="log-body"><tr><td colspan="9" class="empty-state">No entries yet</td></tr></tbody>
+      </table>
+    </div>
+    <div class="toolbar">
+      <span class="toolbar-count" id="log-count">0 entries</span>
+      <button class="btn btn-danger" onclick="clearLog()">Clear Log</button>
+    </div>
+  </div>
+</div>
+
+<!-- ASSETS TAB -->
+<div class="page" id="page-assets">
+  <div class="card" style="margin-bottom:12px;">
+    <div class="card-body" style="padding:10px 14px;">
+      <input type="text" placeholder="Search tag or name…" id="asset-search"
+        style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);padding:8px 12px;font-size:13px;outline:none;"
+        oninput="renderAssets()" />
+    </div>
+  </div>
+  <div style="text-align:right;margin-bottom:8px;">
+    <button class="btn btn-primary" onclick="openNewAssetSheet()">+ Add Asset</button>
+  </div>
+  <div class="card" style="padding:0;">
+    <div id="asset-list"><div class="empty-state">No assets registered yet</div></div>
+  </div>
+</div>
+
+<!-- EXPORT TAB -->
+<div class="page" id="page-export">
+  <div class="card">
+    <div class="card-head">Export Log</div>
+    <div class="card-body">
+      <div class="field">
+        <label>Date Range</label>
+        <select id="export-range">
+          <option value="all">All time</option>
+          <option value="today" selected>Today only</option>
+          <option value="week">This week</option>
+        </select>
+      </div>
+      <div class="divider"></div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <button class="btn btn-primary btn-full" onclick="exportPDF()">Download Scan Log PDF</button>
+        <button class="btn btn-ghost btn-full" onclick="exportCSV()">Download CSV</button>
+        <button class="btn btn-ghost btn-full" onclick="exportRegistryPDF()">Download Asset Registry PDF</button>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head">Data</div>
+    <div class="card-body">
+      <p style="font-size:12px;color:var(--text2);margin-bottom:12px;line-height:1.6;">All data is stored locally in this browser. Export regularly — clearing browser data will erase logs.</p>
+      <button class="btn btn-danger btn-full" onclick="clearAll()">Clear All Data</button>
+    </div>
+  </div>
+</div>
+```
+
+  </div>
+</div>
+
+<!-- LOG ENTRY SHEET -->
+
+<div class="overlay" id="log-sheet-overlay" onclick="closeSheetOnBg(event,'log-sheet-overlay')">
+  <div class="sheet" onclick="event.stopPropagation()">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" id="sheet-title">LOG ENTRY</div>
+
+```
+<div class="detail-block" id="sheet-asset-info" style="display:none;">
+  <div class="detail-row"><span class="detail-key">Tag</span><span class="detail-val mono" id="si-tag">—</span></div>
+  <div class="detail-row"><span class="detail-key">Tool</span><span class="detail-val" id="si-name">—</span></div>
+  <div class="detail-row"><span class="detail-key">Type</span><span class="detail-val" id="si-type">—</span></div>
+  <div class="detail-row"><span class="detail-key">S/N</span><span class="detail-val" id="si-serial">—</span></div>
+  <div class="detail-row"><span class="detail-key">Last Log</span><span class="detail-val" id="si-last">Never</span></div>
+</div>
+
+<!-- Shown when asset not yet registered -->
+<div id="new-asset-fields">
+  <div class="field"><label>Tool Name</label><input type="text" id="f-name" placeholder="e.g. Combustion Analyzer, Extension Ladder…" /></div>
+  <div class="inline-row">
+    <div class="field">
+      <label>Tool Type</label>
+      <select id="f-tooltype">
+        <option value="">— select —</option>
+        <option>Test Equipment</option><option>Power Tool</option><option>Hand Tool</option>
+        <option>Measuring</option><option>Safety</option><option>Ladder / Access</option>
+        <option>Venting / Install</option><option>Camera / Inspection</option><option>Other</option>
+      </select>
+    </div>
+    <div class="field"><label>Serial # (opt)</label><input type="text" id="f-serial" placeholder="Mfr S/N" /></div>
+  </div>
+</div>
+
+<div class="field">
+  <label>Condition</label>
+  <select id="f-condition">
+    <option>New</option><option selected>Good</option><option>Fair</option>
+    <option>Poor</option><option>Needs Replacement</option><option>Lost</option><option>Other</option>
+  </select>
+</div>
+<div class="field">
+  <label>Notes (optional)</label>
+  <textarea id="f-notes" placeholder="Job #, condition details, observations…"></textarea>
+</div>
+
+<div class="sheet-actions">
+  <button class="btn btn-ghost" style="flex:1;" onclick="closeSheet()">Cancel</button>
+  <button class="btn btn-primary" style="flex:2;" onclick="saveEntry()">Save Entry</button>
+</div>
+```
+
+  </div>
+</div>
+
+<!-- ASSET DETAIL / EDIT SHEET -->
+
+<div class="overlay" id="asset-sheet-overlay" onclick="closeSheetOnBg(event,'asset-sheet-overlay')">
+  <div class="sheet" onclick="event.stopPropagation()">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" id="ad-title">ASSET</div>
+    <div class="detail-block" id="ad-info"></div>
+
+```
+<!-- Editable fields -->
+<div id="ad-edit">
+  <div class="field"><label>Tool Name</label><input type="text" id="ad-name" /></div>
+  <div class="inline-row">
+    <div class="field">
+      <label>Type</label>
+      <select id="ad-type">
+        <option value="">— select —</option>
+        <option>Test Equipment</option><option>Power Tool</option><option>Hand Tool</option>
+        <option>Measuring</option><option>Safety</option><option>Ladder / Access</option>
+        <option>Venting / Install</option><option>Camera / Inspection</option><option>Other</option>
+      </select>
+    </div>
+    <div class="field"><label>Serial #</label><input type="text" id="ad-serial" /></div>
+  </div>
+  <div class="field"><label>Purchase Price ($)</label><input type="number" id="ad-price" placeholder="0.00" step="0.01" min="0" /></div>
+  <div class="field"><label>Notes</label><input type="text" id="ad-notes" placeholder="Truck, condition notes…" /></div>
+</div>
+
+<div class="card-head" style="border-radius:var(--radius) var(--radius) 0 0;background:var(--surface2);margin-top:12px;">Scan History</div>
+<div id="ad-history" style="background:var(--surface2);border-radius:0 0 var(--radius) var(--radius);overflow:hidden;"></div>
+
+<div style="margin-top:16px;display:flex;gap:8px;">
+  <button class="btn btn-danger" id="ad-delete-btn" style="flex:1;">Delete</button>
+  <button class="btn btn-ghost" onclick="closeAssetSheet()" style="flex:1;">Cancel</button>
+  <button class="btn btn-primary" onclick="saveAssetEdit()" style="flex:2;">Save Changes</button>
+</div>
+```
+
+  </div>
+</div>
+
+<!-- CAMERA -->
+
+<div id="camera-overlay">
+  <div style="position:relative;flex:1;">
+    <video id="camera-video" autoplay muted playsinline webkit-playsinline></video>
+    <div class="scan-frame"><div class="scan-line"></div></div>
+  </div>
+  <div class="camera-bar">
+    <button class="btn btn-ghost" onclick="closeCamera()" style="flex:1;">Cancel</button>
+    <span style="font-size:11px;color:var(--text3);flex:2;text-align:center;">Hold steady · barcode fills the box</span>
+  </div>
+</div>
+
+<script>
+// ── STATE ──────────────────────────────────────────────────────────────
+let mode = 'checkout';
+let currentBarcode = '';
+let cameraStream = null;
+let zxingReader = null;
+let editingBarcode = null;
+
+const COND_ISSUES = ['Poor','Needs Replacement','Lost'];
+
+// ── STORAGE ────────────────────────────────────────────────────────────
+const load = () => ({
+  assets: JSON.parse(localStorage.getItem('ws_assets') || '[]'),
+  logs:   JSON.parse(localStorage.getItem('ws_logs')   || '[]'),
+});
+const saveAssets = a => localStorage.setItem('ws_assets', JSON.stringify(a));
+const saveLogs   = l => localStorage.setItem('ws_logs',   JSON.stringify(l));
+
+function getAsset(barcode){ return load().assets.find(a => a.barcode === barcode) || null; }
+
+function upsertAsset(barcode, name, type, serial, price, notes){
+  const { assets } = load();
+  const idx = assets.findIndex(a => a.barcode === barcode);
+  if(idx === -1){
+    assets.push({ barcode, name: name||barcode, type: type||'', serial: serial||'', price: price||'', notes: notes||'', created: Date.now() });
+  } else {
+    if(name   !== undefined) assets[idx].name   = name   || assets[idx].name;
+    if(type   !== undefined) assets[idx].type   = type   || assets[idx].type;
+    if(serial !== undefined) assets[idx].serial = serial;
+    if(price  !== undefined) assets[idx].price  = price;
+    if(notes  !== undefined) assets[idx].notes  = notes;
+  }
+  saveAssets(assets);
+}
+
+function addLog(entry){ const { logs } = load(); logs.unshift(entry); saveLogs(logs); }
+function deleteLog(id){ const { logs } = load(); saveLogs(logs.filter(l => l.id !== id)); }
+function deleteAsset(barcode){ const { assets, logs } = load(); saveAssets(assets.filter(a=>a.barcode!==barcode)); saveLogs(logs.filter(l=>l.barcode!==barcode)); }
+
+// ── CLOCK ──────────────────────────────────────────────────────────────
+const pad = n => String(n).padStart(2,'0');
+const nowStr  = () => { const d=new Date(); return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds()); };
+const dateStr = ts => { const d=new Date(ts); return pad(d.getDate())+'/'+pad(d.getMonth()+1)+' '+pad(d.getHours())+':'+pad(d.getMinutes()); };
+const todayStart = () => { const d=new Date(); d.setHours(0,0,0,0); return d.getTime(); };
+const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const fmt$ = v => (v && parseFloat(v)) ? '$'+parseFloat(v).toFixed(2) : '—';
+setInterval(() => { document.getElementById('clock').textContent = nowStr(); }, 1000);
+
+// ── TABS ───────────────────────────────────────────────────────────────
+function switchTab(tab){
+  document.querySelectorAll('.tab').forEach((t,i)=>{ t.classList.toggle('active', ['scan','log','assets','export'][i]===tab); });
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('page-'+tab).classList.add('active');
+  if(tab==='scan')    focusScan();
+  if(tab==='log')     renderLog();
+  if(tab==='assets')  renderAssets();
+  updateStats();
+}
+
+// ── MODE ───────────────────────────────────────────────────────────────
+function setMode(m){
+  mode = m;
+  ['checkout','checkin','spotcheck'].forEach(id => document.getElementById('mode-'+id).classList.toggle('active', id===m));
+  focusScan();
+}
+
+// ── SCAN INPUT ─────────────────────────────────────────────────────────
+function focusScan(){ setTimeout(()=>document.getElementById('scan-input').focus(), 80); }
+
+document.getElementById('scan-input').addEventListener('keydown', function(e){
+  if(e.key==='Enter'){ e.preventDefault(); handleScan(this.value.trim()); }
+});
+
+let inputTimer = null;
+document.getElementById('scan-input').addEventListener('input', function(){
+  clearTimeout(inputTimer);
+  const val = this.value.trim();
+  // Auto-submit on BB-### format (BB- followed by digits)
+  if(/^BB-\d{2,4}$/i.test(val)){
+    inputTimer = setTimeout(()=>handleScan(val), 80);
+  }
+});
+
+function handleScan(raw){
+  const input = document.getElementById('scan-input');
+  if(!raw) return;
+  const barcode = raw.toUpperCase().trim();
+  currentBarcode = barcode;
+  input.value = '';
+  flashInput('ok');
+  openLogSheet(barcode);
+}
+
+function flashInput(type){
+  const el = document.getElementById('scan-input');
+  el.classList.remove('flash-ok','flash-err');
+  void el.offsetWidth;
+  el.classList.add('flash-'+type);
+  setTimeout(()=>el.classList.remove('flash-ok','flash-err'), 700);
+}
+
+// ── LOG SHEET ──────────────────────────────────────────────────────────
+function openLogSheet(barcode){
+  const asset = getAsset(barcode);
+  const isNew = !asset;
+  const modeLabel = mode==='checkout'?'CHECK-OUT':mode==='checkin'?'CHECK-IN':'SPOT CHECK';
+
+  document.getElementById('sheet-title').textContent = modeLabel + ' · ' + barcode;
+
+  const infoBlock = document.getElementById('sheet-asset-info');
+  if(!isNew){
+    infoBlock.style.display = '';
+    document.getElementById('si-tag').textContent    = barcode;
+    document.getElementById('si-name').textContent   = asset.name || '—';
+    document.getElementById('si-type').textContent   = asset.type || '—';
+    document.getElementById('si-serial').textContent = asset.serial || '—';
+    const { logs } = load();
+    const last = logs.find(l=>l.barcode===barcode);
+    document.getElementById('si-last').textContent   = last ? dateStr(last.ts) : 'Never';
+  } else {
+    infoBlock.style.display = 'none';
+  }
+
+  // Show new-asset fields only if unregistered
+  document.getElementById('new-asset-fields').style.display = isNew ? '' : 'none';
+  document.getElementById('f-name').value     = '';
+  document.getElementById('f-tooltype').value = '';
+  document.getElementById('f-serial').value   = '';
+  document.getElementById('f-condition').value = 'Good';
+  document.getElementById('f-notes').value    = '';
+
+  document.getElementById('log-sheet-overlay').classList.add('open');
+  setTimeout(()=>document.getElementById('f-condition').focus(), 300);
+}
+
+function closeSheet(){
+  document.getElementById('log-sheet-overlay').classList.remove('open');
+  focusScan();
+}
+
+function closeSheetOnBg(e, id){
+  if(e.target===document.getElementById(id)){
+    document.getElementById(id).classList.remove('open');
+    if(id==='log-sheet-overlay') focusScan();
+  }
+}
+
+function saveEntry(){
+  const barcode   = currentBarcode;
+  const asset     = getAsset(barcode);
+  const name      = asset ? asset.name : (document.getElementById('f-name').value.trim() || barcode);
+  const type      = asset ? asset.type : document.getElementById('f-tooltype').value;
+  const serial    = asset ? asset.serial : document.getElementById('f-serial').value.trim();
+  const condition = document.getElementById('f-condition').value;
+  const notes     = document.getElementById('f-notes').value.trim();
+  const tech      = document.getElementById('batch-tech').value;
+  const action    = mode==='checkout'?'Check-Out':mode==='checkin'?'Check-In':'Spot Check';
+
+  upsertAsset(barcode, name, type, serial);
+
+  addLog({ id: Date.now()+Math.random(), ts: Date.now(), barcode, name, type, condition, tech, action, notes });
+  closeSheet();
+  updateStats();
+  renderRecent();
+  focusScan();
+}
+
+// ── STATS ──────────────────────────────────────────────────────────────
+function updateStats(){
+  const { logs, assets } = load();
+  const today = todayStart();
+  const tl = logs.filter(l=>l.ts>=today);
+  const iss = logs.filter(l=>COND_ISSUES.includes(l.condition));
+  ['s','l'].forEach(p=>{
+    document.getElementById(p+'-total').textContent  = logs.length;
+    document.getElementById(p+'-today').textContent  = tl.length;
+    document.getElementById(p+'-assets').textContent = assets.length;
+    document.getElementById(p+'-issues').textContent = iss.length;
+  });
+}
+
+// ── RECENT ─────────────────────────────────────────────────────────────
+function renderRecent(){
+  const { logs } = load();
+  const el = document.getElementById('recent-list');
+  const recent = logs.slice(0,6);
+  if(!recent.length){ el.innerHTML='<div class="empty-state">No scans yet</div>'; return; }
+  el.innerHTML = recent.map(l=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--border);">
+      <span class="mono" style="color:var(--accent);min-width:64px;">${esc(l.barcode)}</span>
+      <span style="flex:1;font-size:12px;color:var(--text2);">${esc(l.name)}</span>
+      <span style="font-size:11px;color:var(--text3);margin-right:6px;">${esc(l.action||'')}</span>
+      <span class="pill ${condPill(l.condition)}">${esc(l.condition)}</span>
+    </div>`).join('') + (logs.length>6?`<div style="padding:8px 14px;font-size:11px;color:var(--text3);">+${logs.length-6} more — see Log tab</div>`:'');
+}
+
+// ── LOG TABLE ──────────────────────────────────────────────────────────
+function renderLog(){
+  const { logs } = load();
+  const tb = document.getElementById('log-body');
+  document.getElementById('log-count').textContent = logs.length+' entr'+(logs.length===1?'y':'ies');
+  if(!logs.length){ tb.innerHTML='<tr><td colspan="9" class="empty-state">No entries yet</td></tr>'; return; }
+  tb.innerHTML = logs.map(l=>`
+    <tr>
+      <td class="mono" style="white-space:nowrap;color:var(--text3);font-size:11px;">${dateStr(l.ts)}</td>
+      <td class="mono" style="color:var(--accent);">${esc(l.barcode)}</td>
+      <td style="font-size:12px;">${esc(l.name)}</td>
+      <td style="font-size:11px;color:var(--text3);">${esc(l.type||'—')}</td>
+      <td style="font-size:11px;">${esc(l.action||'—')}</td>
+      <td style="font-size:12px;color:var(--text2);">${esc(l.tech||'—')}</td>
+      <td><span class="pill ${condPill(l.condition)}">${esc(l.condition)}</span></td>
+      <td style="font-size:11px;color:var(--text3);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(l.notes||'—')}</td>
+      <td><button class="del-btn" onclick="deleteEntryById(${JSON.stringify(l.id)})">✕</button></td>
+    </tr>`).join('');
+}
+
+function deleteEntryById(id){ if(!confirm('Remove entry?')) return; deleteLog(id); renderLog(); renderRecent(); updateStats(); }
+function clearLog(){ const {logs}=load(); if(!logs.length) return; if(!confirm('Clear all '+logs.length+' entries?')) return; saveLogs([]); renderLog(); renderRecent(); updateStats(); }
+
+// ── ASSETS TAB ─────────────────────────────────────────────────────────
+function renderAssets(){
+  const { assets, logs } = load();
+  const q = (document.getElementById('asset-search')?.value||'').toLowerCase();
+  const filtered = assets.filter(a=>!q||a.barcode.toLowerCase().includes(q)||a.name.toLowerCase().includes(q));
+  const el = document.getElementById('asset-list');
+  if(!filtered.length){ el.innerHTML='<div class="empty-state">'+(q?'No match':'No assets registered yet')+'</div>'; return; }
+  el.innerHTML = filtered.map(a=>{
+    const count = logs.filter(l=>l.barcode===a.barcode).length;
+    const last  = logs.find(l=>l.barcode===a.barcode);
+    return `<div class="asset-row" onclick="openAssetDetail('${esc(a.barcode)}')">
+      <span class="asset-code">${esc(a.barcode)}</span>
+      <div class="asset-info">
+        <div class="asset-name">${esc(a.name)}</div>
+        <div class="asset-meta">${a.type?esc(a.type)+' · ':''} ${a.serial?'S/N: '+esc(a.serial)+' · ':''}${last?'Last: '+dateStr(last.ts):'No logs'}</div>
+      </div>
+      <span class="asset-count">${count}</span>
+    </div>`;
+  }).join('');
+}
+
+function openNewAssetSheet(){
+  editingBarcode = null;
+  document.getElementById('ad-title').textContent = 'ADD ASSET';
+  document.getElementById('ad-info').innerHTML = '<div class="field"><label>Barcode / Tag</label><input type="text" id="ad-barcode" placeholder="BB-001" style="width:100%;padding:9px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-size:14px;outline:none;" /></div>';
+  document.getElementById('ad-name').value   = '';
+  document.getElementById('ad-type').value   = '';
+  document.getElementById('ad-serial').value = '';
+  document.getElementById('ad-price').value  = '';
+  document.getElementById('ad-notes').value  = '';
+  document.getElementById('ad-history').innerHTML = '';
+  document.getElementById('ad-delete-btn').style.display = 'none';
+  document.getElementById('asset-sheet-overlay').classList.add('open');
+}
+
+function openAssetDetail(barcode){
+  editingBarcode = barcode;
+  const { assets, logs } = load();
+  const asset = assets.find(a=>a.barcode===barcode);
+  if(!asset) return;
+  const assetLogs = logs.filter(l=>l.barcode===barcode);
+
+  document.getElementById('ad-title').textContent = barcode;
+  document.getElementById('ad-info').innerHTML = `
+    <div class="detail-row"><span class="detail-key">Tag</span><span class="detail-val">${esc(asset.barcode)}</span></div>
+    <div class="detail-row"><span class="detail-key">Logs</span><span class="detail-val">${assetLogs.length}</span></div>
+    ${asset.price?`<div class="detail-row"><span class="detail-key">Value</span><span class="detail-val">${fmt$(asset.price)}</span></div>`:''}`;
+
+  document.getElementById('ad-name').value   = asset.name   || '';
+  document.getElementById('ad-type').value   = asset.type   || '';
+  document.getElementById('ad-serial').value = asset.serial || '';
+  document.getElementById('ad-price').value  = asset.price  || '';
+  document.getElementById('ad-notes').value  = asset.notes  || '';
+
+  document.getElementById('ad-history').innerHTML = assetLogs.length
+    ? assetLogs.slice(0,8).map(l=>`
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);">
+          <span style="font-size:11px;color:var(--text3);min-width:80px;">${dateStr(l.ts)}</span>
+          <span style="font-size:11px;color:var(--text2);flex:1;">${esc(l.action||'')}</span>
+          <span class="pill ${condPill(l.condition)}" style="font-size:10px;">${esc(l.condition)}</span>
+        </div>`).join('')
+    : '<div class="empty-state" style="padding:16px;">No logs yet</div>';
+
+  document.getElementById('ad-delete-btn').style.display = '';
+  document.getElementById('ad-delete-btn').onclick = ()=>{
+    if(!confirm('Delete '+barcode+' and all its logs?')) return;
+    deleteAsset(barcode);
+    closeAssetSheet();
+    renderAssets();
+    updateStats();
+  };
+  document.getElementById('asset-sheet-overlay').classList.add('open');
+}
+
+function saveAssetEdit(){
+  const barcode = editingBarcode || (document.getElementById('ad-barcode')?.value.trim().toUpperCase());
+  if(!barcode){ alert('Barcode required.'); return; }
+  const name   = document.getElementById('ad-name').value.trim();
+  const type   = document.getElementById('ad-type').value;
+  const serial = document.getElementById('ad-serial').value.trim();
+  const price  = document.getElementById('ad-price').value;
+  const notes  = document.getElementById('ad-notes').value.trim();
+  if(!name){ alert('Tool name required.'); return; }
+  upsertAsset(barcode, name, type, serial, price, notes);
+  closeAssetSheet();
+  renderAssets();
+  updateStats();
+}
+
+function closeAssetSheet(){ document.getElementById('asset-sheet-overlay').classList.remove('open'); }
+
+// ── EXPORT ─────────────────────────────────────────────────────────────
+function filteredLogs(){
+  const range = document.getElementById('export-range').value;
+  const { logs } = load();
+  const now = Date.now(), today = todayStart(), weekAgo = now-7*24*60*60*1000;
+  return logs.filter(l=>{ if(range==='today') return l.ts>=today; if(range==='week') return l.ts>=weekAgo; return true; });
+}
+
+function exportCSV(){
+  const logs = filteredLogs();
+  if(!logs.length){ alert('No entries.'); return; }
+  const df = new Intl.DateTimeFormat('en-US',{month:'2-digit',day:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+  const rows = logs.map(l=>[df.format(new Date(l.ts)),l.barcode,'"'+l.name.replace(/"/g,'""')+'"',l.type||'',l.action||'',l.tech||'',l.condition,'"'+(l.notes||'').replace(/"/g,'""')+'"'].join(','));
+  const blob = new Blob(['Date,Tag,Name,Type,Action,Tech,Condition,Notes\n'+rows.join('\n')],{type:'text/csv'});
+  const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='ws-tool-log-'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+}
+
+function exportPDF(){
+  const logs = filteredLogs();
+  if(!logs.length){ alert('No entries.'); return; }
+  const {jsPDF} = window.jspdf;
+  const doc = new jsPDF({orientation:'landscape',unit:'mm',format:'letter'});
+  doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(30);
+  doc.text('WilliamSmith Fireplaces — Tool Scan Log', 14, 15);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(120);
+  doc.text('Exported: '+new Date().toLocaleDateString(), 14, 21);
+  doc.text('Entries: '+logs.length, 255, 21, {align:'right'});
+  doc.setTextColor(0);
+  doc.autoTable({
+    startY: 26,
+    head: [['Date/Time','Tag','Tool Name','Type','Action','Tech','Condition','Notes']],
+    body: [...logs].reverse().map(l=>[dateStr(l.ts),l.barcode,l.name,l.type||'—',l.action||'—',l.tech||'—',l.condition,l.notes||'—']),
+    styles: {fontSize:8,cellPadding:2.5,font:'helvetica'},
+    headStyles: {fillColor:[26,20,15],textColor:[200,129,58],fontStyle:'bold',fontSize:8},
+    alternateRowStyles: {fillColor:[250,249,247]},
+    columnStyles: {0:{cellWidth:26},1:{cellWidth:18,fontStyle:'bold'},2:{cellWidth:44},3:{cellWidth:28},4:{cellWidth:24},5:{cellWidth:26},6:{cellWidth:26},7:{cellWidth:'auto'}}
+  });
+  const pc=doc.internal.getNumberOfPages();
+  for(let i=1;i<=pc;i++){ doc.setPage(i); doc.setFontSize(7); doc.setTextColor(160); doc.text('Page '+i+'/'+pc+' · WilliamSmith Fireplaces Tool Log', 14, doc.internal.pageSize.height-7); }
+  doc.save('ws-tool-log-'+new Date().toISOString().slice(0,10)+'.pdf');
+}
+
+function exportRegistryPDF(){
+  const { assets, logs } = load();
+  if(!assets.length){ alert('No assets registered.'); return; }
+  const {jsPDF} = window.jspdf;
+  const doc = new jsPDF({orientation:'landscape',unit:'mm',format:'letter'});
+  doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(30);
+  doc.text('WilliamSmith Fireplaces — Asset Registry', 14, 15);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(120);
+  doc.text('Exported: '+new Date().toLocaleDateString(), 14, 21);
+  doc.text('Assets: '+assets.length, 255, 21, {align:'right'});
+  doc.setTextColor(0);
+  const total = assets.reduce((s,a)=>s+(parseFloat(a.price)||0),0);
+  doc.autoTable({
+    startY: 26,
+    head: [['Tag','Tool Name','Type','Serial #','Value','Notes']],
+    body: [...assets].sort((a,b)=>a.barcode.localeCompare(b.barcode)).map(a=>[a.barcode,a.name,a.type||'—',a.serial||'—',fmt$(a.price),a.notes||'—']),
+    styles: {fontSize:9,cellPadding:3},
+    headStyles: {fillColor:[26,20,15],textColor:[200,129,58],fontStyle:'bold',fontSize:8},
+    alternateRowStyles: {fillColor:[250,249,247]},
+    columnStyles: {0:{cellWidth:22,fontStyle:'bold'},1:{cellWidth:56},2:{cellWidth:32},3:{cellWidth:36},4:{cellWidth:22},5:{cellWidth:'auto'}},
+    foot: total?[['','','','','Total',fmt$(total)]]:undefined,
+    footStyles: {fillColor:[26,20,15],textColor:[200,129,58],fontStyle:'bold'}
+  });
+  const pc=doc.internal.getNumberOfPages();
+  for(let i=1;i<=pc;i++){ doc.setPage(i); doc.setFontSize(7); doc.setTextColor(160); doc.text('Page '+i+'/'+pc+' · WilliamSmith Fireplaces Asset Registry', 14, doc.internal.pageSize.height-7); }
+  doc.save('ws-asset-registry-'+new Date().toISOString().slice(0,10)+'.pdf');
+}
+
+// ── CLEAR ALL ──────────────────────────────────────────────────────────
+function clearAll(){ if(!confirm('Delete ALL assets and logs?')) return; localStorage.removeItem('ws_assets'); localStorage.removeItem('ws_logs'); renderLog(); renderAssets(); renderRecent(); updateStats(); }
+
+// ── CAMERA ─────────────────────────────────────────────────────────────
+async function openCamera(){
+  const overlay = document.getElementById('camera-overlay');
+  overlay.classList.add('open');
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment', width:{ideal:1280}, height:{ideal:720} } });
+    const video = document.getElementById('camera-video');
+    video.srcObject = cameraStream;
+    if(typeof ZXing==='undefined') await loadScript('https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js');
+    zxingReader = new ZXing.BrowserMultiFormatReader();
+    zxingReader.decodeFromVideoElement(video, (result, err)=>{
+      if(result){ closeCamera(); handleScan(result.getText()); }
+    });
+  } catch(e){ alert('Camera not available: '+e.message); closeCamera(); }
+}
+
+function closeCamera(){
+  document.getElementById('camera-overlay').classList.remove('open');
+  if(zxingReader){ try{ zxingReader.reset(); }catch(e){} zxingReader=null; }
+  if(cameraStream){ cameraStream.getTracks().forEach(t=>t.stop()); cameraStream=null; }
+  focusScan();
+}
+
+function loadScript(src){ return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s); }); }
+
+// ── HELPERS ────────────────────────────────────────────────────────────
+function condPill(c){
+  return {New:'pill-new',Good:'pill-good',Fair:'pill-fair',Poor:'pill-poor','Needs Replacement':'pill-replace',Lost:'pill-lost'}[c]||'pill-other';
+}
+
+// ── INIT ───────────────────────────────────────────────────────────────
+window.addEventListener('load', ()=>{ updateStats(); renderRecent(); focusScan(); setMode('checkout'); });
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) focusScan(); });
+</script>
+
+</body>
+</html>
